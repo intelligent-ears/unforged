@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "fixture:snapshot": "node scripts/make-fixture-snapshot.mjs"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.1",
