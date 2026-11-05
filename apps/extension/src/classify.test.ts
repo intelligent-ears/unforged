@@ -62,4 +62,8 @@ describe("classify", () => {
   it("does not filter when the tab origin is unknown", () => {
     expect(classify(req({}), undefined, POLICY)).toEqual({ tabOrigin: undefined, filter: false });
   });
+
+  it("filters a worker on a policy tab", () => {
+    expect(classify(req({ type: "worker" }), "http://localhost:8080", POLICY).filter).toBe(true);
+  });
 });

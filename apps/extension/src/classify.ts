@@ -17,7 +17,8 @@ export interface Classification {
   filter: boolean;
 }
 
-const CODE_TYPES = new Set(["main_frame", "sub_frame", "script", "stylesheet"]);
+// "worker" is not a Firefox ResourceType today; listed so it is checked if Firefox ever reports it.
+const CODE_TYPES = new Set(["main_frame", "sub_frame", "script", "stylesheet", "worker"]);
 
 function originOf(url: string | undefined): string | undefined {
   if (!url) return undefined;
