@@ -83,7 +83,7 @@ describe("runPublish", () => {
   });
 
   it("needs an access key to reach the registry", async () => {
-    await expect(runPublish(attestationPath, manifestPath, { env })).rejects.toThrow(/ARKIV_API_KEY is not set/);
+    await expect(runPublish(attestationPath, manifestPath, { env })).rejects.toThrow(/ARKIV_ACCESS_KEY is not set/);
   });
 
   it("is idempotent: an existing root for this creator publishes nothing", async () => {

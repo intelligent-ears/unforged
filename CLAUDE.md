@@ -19,7 +19,7 @@ Read only what your task names. Specs: `docs/architecture.md` (map), `docs/forma
 ## Hard rules
 1. `packages/core/src/types.ts` is frozen after M1. If a change seems necessary, stop and say so; don't edit it.
 2. `core` must not import from `registry`, Node built-ins, or browser APIs except `crypto.subtle`.
-3. Never put a private key in code, tests, logs or fixtures. Keys come from env vars (`BUILDER_PRIVATE_KEY`, `CURATOR_PRIVATE_KEY`, `ARKIV_API_KEY`). Tests use viem's generated keys.
+3. Never put a private key in code, tests, logs or fixtures. Keys come from env vars (`BUILDER_PRIVATE_KEY`, `CURATOR_PRIVATE_KEY`, `ARKIV_ACCESS_KEY`). Tests use viem's generated keys.
 4. Transactions go only to testnets: Arkiv Rabdi (chain 7794095), and Sepolia for the optional ENS milestone. Never mainnet.
 5. The extension never queries the registry because the user visited a site. Sync is periodic and bulk.
 6. Fail closed: if verification can't complete, block and say why. Never silently allow.

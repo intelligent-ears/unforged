@@ -53,7 +53,7 @@ export async function registryWrite<T>(call: () => Promise<T>, env: NodeJS.Proce
 function safeMessage(error: unknown, env: NodeJS.ProcessEnv): string {
   const { shortMessage, message } = (error ?? {}) as { shortMessage?: unknown; message?: unknown };
   const text = String(shortMessage ?? message ?? "unknown failure");
-  const key = env.ARKIV_API_KEY?.trim();
+  const key = env.ARKIV_ACCESS_KEY?.trim();
 
   let safe = (text.split("\n")[0] ?? "").replace(/\b(?:https?|wss?):\/\/\S+/g, "[url]");
   if (key) safe = safe.replaceAll(key, "[redacted]").replaceAll(encodeURIComponent(key), "[redacted]");

@@ -84,7 +84,7 @@ describe("runPolicy", () => {
   });
 
   it("needs an access key to reach the registry", async () => {
-    await expect(runPolicy(path, { env })).rejects.toThrow(/ARKIV_API_KEY is not set/);
+    await expect(runPolicy(path, { env })).rejects.toThrow(/ARKIV_ACCESS_KEY is not set/);
   });
 
   it("does not accept the builder key", async () => {

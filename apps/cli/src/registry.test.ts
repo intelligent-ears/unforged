@@ -4,7 +4,7 @@ import { accessKeyFromEnv } from "./keys.js";
 import { explorerAddressUrl, explorerTxUrl, registryCall, registryWrite } from "./registry.js";
 
 const KEY = "s3cret/key";
-const env = { ARKIV_API_KEY: KEY };
+const env = { ARKIV_ACCESS_KEY: KEY };
 const fail = (error: unknown) => async () => {
   throw error;
 };
@@ -18,13 +18,13 @@ describe("explorer links", () => {
 });
 
 describe("accessKeyFromEnv", () => {
-  it("reads ARKIV_API_KEY", () => {
+  it("reads ARKIV_ACCESS_KEY", () => {
     expect(accessKeyFromEnv(env)).toBe(KEY);
   });
 
   it("fails without it, rather than falling back to keyless writes", () => {
-    expect(() => accessKeyFromEnv({})).toThrow(/ARKIV_API_KEY is not set/);
-    expect(() => accessKeyFromEnv({ ARKIV_API_KEY: "  " })).toThrow(/ARKIV_API_KEY is not set/);
+    expect(() => accessKeyFromEnv({})).toThrow(/ARKIV_ACCESS_KEY is not set/);
+    expect(() => accessKeyFromEnv({ ARKIV_ACCESS_KEY: "  " })).toThrow(/ARKIV_ACCESS_KEY is not set/);
   });
 });
 
