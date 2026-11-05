@@ -12,15 +12,18 @@ import { asc, eq, gt } from "@arkiv-network/sdk/query";
 import { bytes, defineSchema, key, str, u64 } from "@arkiv-network/sdk/schema";
 import { type AttestationEntry, canonicalJSON, type Hex, type Manifest, type Policy, type SignedAttestation } from "@unforged/core";
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from "fflate";
-import { type Account, hexToBytes, http } from "viem";
+import { type Account, hexToBytes, http, HttpRequestError } from "viem";
 
 const PROJECT = "unforged";
 const CONTENT_TYPE = "application/gzip";
 const PAGE_SIZE = 100; // the most one page can hold
 const MAX_PAGES = 50; // a builder can publish anything under their own key, so scans are bounded
 const MAX_PAYLOAD_BYTES = 120_000; // formats.md §4
+const MAX_ATTEMPTS = 6; // with the delays below, about 15 seconds of waiting before giving up
+const BASE_DELAY_MS = 500;
+const MAX_DELAY_MS = 60_000;
 
-// Unnamed schemas, so entities carry exactly the formats.md attributes and no arkiv.schema tag.
+// One schema per entity kind. Unnamed, so entities carry exactly the formats.md attributes and no arkiv.schema tag.
 // Readonly entities can never gain an index later, so everything worth querying is indexed now.
 const AttestationSchema = defineSchema({
   project: str().indexed(),
@@ -53,6 +56,9 @@ const CREATE_OPTIONS = {
 export type ReadClient = Pick<PublicArkivClient, "select" | "getEntity">;
 export type WriteClient = Pick<WalletArkivClient, "createEntity">;
 
+/** What a read runs against: a client, or an access key to make one with. No key or "" means the public RPC. */
+export type ReadSource = ReadClient | { accessKey?: string };
+
 export interface AttestationAttributes {
   dapp: string;
   release: string;
@@ -79,9 +85,31 @@ const transportOptions = { fetchOptions: { cache: "no-store", redirect: "error" 
 /**
  * A reader on Rabdi. Without a key it uses the public endpoint, which is heavily rate
  * limited and can answer HTTP 429. The extension uses this form: it never holds a key.
+ * viem's retries are off because withBackoff handles 429s, and the two would multiply.
  */
 export const createReadClient = (accessKey = "") =>
-  createPublicClient({ chain: rabdi({ accessKey }), cacheTime: 0, transport: http(undefined, transportOptions) });
+  createPublicClient({
+    chain: rabdi({ accessKey }),
+    cacheTime: 0,
+    transport: http(undefined, { ...transportOptions, retryCount: 0 }),
+  });
+
+/**
+ * Runs one request, retrying on HTTP 429 after 0.5s, 1s, 2s, 4s and 8s, or after the server's
+ * Retry-After. Any other failure, or a 429 on the last attempt, throws: a read that couldn't
+ * finish must not look like an empty result.
+ */
+export async function withBackoff<T>(call: () => Promise<T>, sleep: (ms: number) => Promise<void> = delay): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await call();
+    } catch (error) {
+      const limited = rateLimitError(error);
+      if (limited === undefined || attempt === MAX_ATTEMPTS) throw error;
+      await sleep(retryAfterMs(limited) ?? BASE_DELAY_MS * 2 ** (attempt - 1));
+    }
+  }
+}
 
 /** A writer on Rabdi. No transport retries: a retried send is not known to be safe. */
 export const createWriteClient = (account: Account, accessKey: string) =>
@@ -130,7 +158,8 @@ export async function publishPolicy(client: WriteClient, policy: Policy, version
 }
 
 /** Every readonly policy this curator published, for all dapps, highest version first. */
-export async function fetchPolicies(client: ReadClient, curator: Hex): Promise<{ version: number; policy: Policy }[]> {
+export async function fetchPolicies(source: ReadSource, curator: Hex): Promise<{ version: number; policy: Policy }[]> {
+  const client = readClientFor(source);
   const rows = await allRows((after) => {
     const query = client
       .select({ $key: true, $creationFlags: true, version: true, payload: true })
@@ -158,11 +187,12 @@ export async function fetchPolicies(client: ReadClient, curator: Hex): Promise<{
  * hasn't seen. Network failures throw: a partial list must not look like a complete one.
  */
 export async function fetchAttestations(
-  client: ReadClient,
+  source: ReadSource,
   builder: Hex,
   dapp: string,
   skipKeys: Set<string> = new Set(),
 ): Promise<(AttestationEntry & { entityKey: string })[]> {
+  const client = readClientFor(source);
   const rows = await allRows((after) => {
     const query = client
       .select({ $key: true, $creationFlags: true, swarm_ref: true })
@@ -177,7 +207,7 @@ export async function fetchAttestations(
   const entries: (AttestationEntry & { entityKey: string })[] = [];
   for (const { $key, $creationFlags, swarm_ref } of rows) {
     if (!$creationFlags.readonly || skipKeys.has($key)) continue;
-    const { $attributes } = await client.getEntity($key);
+    const { $attributes } = await withBackoff(() => client.getEntity($key));
     const decoded = tryDecode<{ attestation: SignedAttestation; manifest: Manifest }>($attributes.payload);
     if (decoded === undefined) continue;
     entries.push({
@@ -192,14 +222,38 @@ export async function fetchAttestations(
 }
 
 /** The key of this creator's attestation for a manifest root, or null. */
-export async function findAttestationKey(client: ReadClient, creator: Hex, manifestRoot: string): Promise<Hex | null> {
-  const { entities } = await client
-    .select({ $key: true })
-    .where([eq("project", PROJECT), eq("entity_type", "attestation"), eq("manifest_root", manifestRoot)])
-    .createdBy(creator)
-    .limit(1)
-    .fetch();
+export async function findAttestationKey(source: ReadSource, creator: Hex, manifestRoot: string): Promise<Hex | null> {
+  const client = readClientFor(source);
+  const { entities } = await withBackoff(() =>
+    client
+      .select({ $key: true })
+      .where([eq("project", PROJECT), eq("entity_type", "attestation"), eq("manifest_root", manifestRoot)])
+      .createdBy(creator)
+      .limit(1)
+      .fetch(),
+  );
   return entities[0]?.$key ?? null;
+}
+
+function readClientFor(source: ReadSource): ReadClient {
+  return "select" in source ? source : createReadClient(source.accessKey);
+}
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** The HTTP 429 in an error's cause chain, if there is one. */
+function rateLimitError(error: unknown): HttpRequestError | undefined {
+  let current = error;
+  for (let depth = 0; current instanceof Error && depth < 10; depth++) {
+    if (current instanceof HttpRequestError && current.status === 429) return current;
+    current = current.cause;
+  }
+  return undefined;
+}
+
+function retryAfterMs(error: HttpRequestError): number | undefined {
+  const header = error.headers?.get("Retry-After");
+  return header != null && /^\d+$/.test(header) ? Math.min(Number(header) * 1000, MAX_DELAY_MS) : undefined;
 }
 
 function encodeChecked(body: unknown): Uint8Array {
@@ -228,7 +282,7 @@ async function allRows<R extends { readonly $key: Hex }>(
   const rows: R[] = [];
   let after: Hex | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
-    const { entities } = await fetchPage(after);
+    const { entities } = await withBackoff(() => fetchPage(after));
     rows.push(...entities);
     if (entities.length < PAGE_SIZE) return rows;
 
