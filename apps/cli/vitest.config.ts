@@ -1,9 +1,14 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-// Tests run against core's source, so they don't need core to be built first.
+const source = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+
+// Tests run against the workspace packages' source, so they don't need them built first.
 export default defineConfig({
   resolve: {
-    alias: { "@unforged/core": fileURLToPath(new URL("../../packages/core/src/index.ts", import.meta.url)) },
+    alias: {
+      "@unforged/core": source("../../packages/core/src/index.ts"),
+      "@unforged/registry": source("../../packages/registry/src/index.ts"),
+    },
   },
 });
