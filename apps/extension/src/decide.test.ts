@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { sha256Hex, type AcceptedRelease, type Manifest, type Policy } from "@unforged/core";
+import { checkConfig, sha256Hex, type AcceptedRelease, type Manifest, type Policy } from "@unforged/core";
 import lido from "../fixtures/lido-0.161.0.manifest.json";
+import fixtureSnapshot from "../fixtures/snapshot.json";
 import { decide, newTab, servedPath, type Snapshot } from "./decide.js";
 
 const ORIGIN = "http://localhost:8080";
@@ -168,7 +170,8 @@ describe("decide", () => {
   });
 
   it("blocks a config file with no pin, even if checkConfig passes", async () => {
-    for (const pins of [{}, { "/other.js": "0".repeat(64) }]) {
+    const unpinned: Record<string, string>[] = [{}, { "/other.js": "0".repeat(64) }];
+    for (const pins of unpinned) {
       const snap = await snapshot(pins);
       const tab = await lockedTab(snap);
       const d = await decide(snap, tab, req("/runtime/window-env.js", ENV_OK));
@@ -199,5 +202,26 @@ describe("decide", () => {
     const snap = await snapshot();
     const d = await decide(snap, newTab(), { ...req("/", INDEX, "main_frame"), tabOrigin: "https://other.example" });
     expect(d.allow).toBe(false);
+  });
+});
+
+describe("fixture snapshot config pin", () => {
+  const genuine = readFileSync(new URL("../../../demo/site/runtime/window-env.js", import.meta.url));
+  const flipped = enc(genuine.toString("utf8").replace('"ipfsMode":false', '"ipfsMode":true'));
+  const snap = fixtureSnapshot as unknown as Snapshot;
+  const lidoTab = () => ({ ...newTab(), lock: snap.dapps["lido-staking-widget"]!.releases[0] });
+  const envReq = (body: Uint8Array) => ({ url: `${ORIGIN}/runtime/window-env.js`, type: "script", tabOrigin: ORIGIN, body });
+
+  it("pins the genuine demo window-env.js", async () => {
+    const pins = snap.dapps["lido-staking-widget"]!.policy.configPins!;
+    expect(pins["/runtime/window-env.js"]).toBe("1dc276f81fab369bcab6cd53b511e4090897b27501adae5b5b5cd9fd46489537");
+    expect(await sha256Hex(genuine)).toBe(pins["/runtime/window-env.js"]);
+    expect(await decide(snap, lidoTab(), envReq(genuine))).toEqual({ allow: true });
+  });
+
+  it("blocks the demo file with ipfsMode flipped, though the Lido rule alone accepts it", async () => {
+    const rule = lido.config["/runtime/window-env.js"] as Manifest["config"][string];
+    expect(checkConfig(rule, flipped).ok).toBe(true);
+    expect((await decide(snap, lidoTab(), envReq(flipped))).blocked?.reason).toBe("config-invalid");
   });
 });
