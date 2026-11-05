@@ -6,6 +6,7 @@ import {
   sha256Hex,
   type AcceptedRelease,
   type Blocked,
+  type ConfigRule,
   type Policy,
   type TabState,
 } from "@unforged/core";
@@ -76,6 +77,23 @@ function resetTab(tab: TabRecord, dapp: string): void {
   tab.state = { dapp, verdict: { level: "unsupported" }, checked: 0, blocked: [] };
 }
 
+/** formats.md §5: accepted only if the policy pins this exact hash AND the rule passes. */
+function checkConfigFile(
+  policy: Policy,
+  tab: TabRecord,
+  path: string,
+  rule: ConfigRule,
+  req: FileRequest,
+  sha256: string,
+): Blocked | undefined {
+  const expected = policy.configPins?.[path];
+  if (expected !== sha256) return { url: req.url, reason: "config-invalid", expected, actual: sha256 };
+  const result = checkConfig(rule, req.body);
+  if (!result.ok) return { url: req.url, reason: "config-invalid", expected, actual: sha256 };
+  tab.state.configValues = { ...tab.state.configValues, ...result.values };
+  return undefined;
+}
+
 /** Returns why the file is blocked, or undefined if it is allowed. */
 function check(
   policy: Policy,
@@ -88,7 +106,7 @@ function check(
   if (url.origin !== req.tabOrigin) return checkThirdParty(policy, req.url, sha256);
   if (req.type === "main_frame") return lockRelease(releases, tab, req.url, sha256);
   if (!tab.lock) return { url: req.url, reason: "release-mixed", actual: sha256 }; // no verified document
-  return checkInRelease(tab, releases, req, sha256);
+  return checkInRelease(policy, tab, releases, req, sha256);
 }
 
 function checkThirdParty(policy: Policy, url: string, sha256: string): Blocked | undefined {
@@ -114,6 +132,7 @@ function lockRelease(releases: AcceptedRelease[], tab: TabRecord, url: string, s
 }
 
 function checkInRelease(
+  policy: Policy,
   tab: TabRecord,
   releases: AcceptedRelease[],
   req: FileRequest,
@@ -122,12 +141,7 @@ function checkInRelease(
   const lock = tab.lock!;
   const path = servedPath(req.url, lock.manifest.files);
   const rule = lock.manifest.config[path];
-  if (rule) {
-    const result = checkConfig(rule, req.body);
-    if (!result.ok) return { url: req.url, reason: "config-invalid", actual: sha256 };
-    tab.state.configValues = { ...tab.state.configValues, ...result.values };
-    return undefined;
-  }
+  if (rule) return checkConfigFile(policy, tab, path, rule, req, sha256);
   const result = checkFile(lock, path, sha256);
   if (result === "ok") return undefined;
   const expected = lock.manifest.files[path];

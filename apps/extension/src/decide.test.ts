@@ -11,11 +11,13 @@ const INDEX = "<html>genuine</html>";
 const CHUNK = "console.log('genuine chunk')";
 const OLD_CHUNK = "console.log('chunk from 0.160.0')";
 const OLD_INDEX = "<html>0.160.0</html>";
-const ENV_OK = 'window.__env__={"rpc":"https://rpc.example.org/x"}';
-const ENV_BAD = 'window.__env__={"rpc":"https://evil.example.com/x"}';
+const ENV_OK = 'window.__env__={"ipfsMode":false,"rpc":"https://rpc.example.org/x"}';
+const ENV_BAD = 'window.__env__={"ipfsMode":false,"rpc":"https://evil.example.com/x"}';
+// Same keys and hosts as ENV_OK, so checkConfig passes; only the pin catches it.
+const ENV_FLIPPED = 'window.__env__={"ipfsMode":true,"rpc":"https://rpc.example.org/x"}';
 const EVIL = "steal()";
 
-const ENV_RULE = { kind: "window-env-json" as const, allowedKeys: ["rpc"], urlHostAllowlist: ["rpc.example.org"] };
+const ENV_RULE = { kind: "window-env-json" as const, allowedKeys: ["ipfsMode", "rpc"], urlHostAllowlist: ["rpc.example.org"] };
 
 async function release(name: string, files: Record<string, string>): Promise<AcceptedRelease> {
   const hashed: Record<string, string> = {};
@@ -40,7 +42,8 @@ async function release(name: string, files: Record<string, string>): Promise<Acc
   };
 }
 
-async function snapshot(): Promise<Snapshot> {
+async function snapshot(configPins: Record<string, string> | undefined = undefined): Promise<Snapshot> {
+  configPins ??= { "/runtime/window-env.js": await hash(ENV_OK) };
   const policy: Policy = {
     dapp: "demo",
     origins: [ORIGIN],
@@ -50,6 +53,7 @@ async function snapshot(): Promise<Snapshot> {
     acceptLatest: 3,
     thirdParty: { "https://cdn.example.org": { "/pinned.js": await hash("pinned()") } },
     recovery: { gateway: "TODO" },
+    configPins,
   };
   const current = await release("2.0.0", { "/index.html": INDEX, "/app/chunk.js": CHUNK });
   const old = await release("1.0.0", { "/index.html": OLD_INDEX, "/app/chunk.js": OLD_CHUNK });
@@ -148,13 +152,39 @@ describe("decide", () => {
     expect(d.blocked?.reason).toBe("release-mixed");
   });
 
-  it("checks config files and records accepted values", async () => {
+  it("allows a pinned config file and records its values", async () => {
     const snap = await snapshot();
     const tab = await lockedTab(snap);
     expect(await decide(snap, tab, req("/runtime/window-env.js", ENV_OK))).toEqual({ allow: true });
-    expect(tab.state.configValues).toEqual({ rpc: "https://rpc.example.org/x" });
-    const bad = await decide(snap, tab, req("/runtime/window-env.js", ENV_BAD));
-    expect(bad.blocked?.reason).toBe("config-invalid");
+    expect(tab.state.configValues).toEqual({ ipfsMode: false, rpc: "https://rpc.example.org/x" });
+  });
+
+  it("blocks a config file that passes checkConfig but differs from the pin", async () => {
+    const snap = await snapshot();
+    const tab = await lockedTab(snap);
+    const d = await decide(snap, tab, req("/runtime/window-env.js", ENV_FLIPPED));
+    expect(d.blocked).toMatchObject({ reason: "config-invalid", expected: await hash(ENV_OK), actual: await hash(ENV_FLIPPED) });
+    expect(tab.state.configValues).toBeUndefined();
+  });
+
+  it("blocks a config file with no pin, even if checkConfig passes", async () => {
+    for (const pins of [{}, { "/other.js": "0".repeat(64) }]) {
+      const snap = await snapshot(pins);
+      const tab = await lockedTab(snap);
+      const d = await decide(snap, tab, req("/runtime/window-env.js", ENV_OK));
+      expect(d.blocked?.reason).toBe("config-invalid");
+    }
+    const snap = await snapshot();
+    delete snap.dapps.demo!.policy.configPins;
+    const tab = await lockedTab(snap);
+    expect((await decide(snap, tab, req("/runtime/window-env.js", ENV_OK))).allow).toBe(false);
+  });
+
+  it("blocks a pinned config file that fails checkConfig", async () => {
+    const snap = await snapshot({ "/runtime/window-env.js": await hash(ENV_BAD) });
+    const tab = await lockedTab(snap);
+    const d = await decide(snap, tab, req("/runtime/window-env.js", ENV_BAD));
+    expect(d.blocked?.reason).toBe("config-invalid");
   });
 
   it("resets the tab on a new top-level document", async () => {
