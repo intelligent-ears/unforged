@@ -21,5 +21,11 @@
     "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@arkiv-network/sdk": "^0.8.1",
+    "@unforged/core": "workspace:*",
+    "fflate": "^0.8.3",
+    "viem": "^2.57.16"
   }
 }

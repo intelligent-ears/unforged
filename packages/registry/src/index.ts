@@ -1,1 +1,1 @@
-export {};
+export * from "./arkiv.js";
