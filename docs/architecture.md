@@ -4,7 +4,7 @@ Working codename: `unforged`. Rename everywhere when the project name is chosen.
 
 ## What we are building
 
-A browser extension that refuses to run a dapp's code unless independent builders rebuilt it from the public source and got the same bytes. Rebuilders publish signed attestations to Arkiv, and the verified build is mirrored on Swarm as a recovery copy.
+A browser extension that refuses to run a dapp's code unless independent builders rebuilt it from the public source and got the same bytes. Rebuilders publish signed attestations to Arkiv, and the verified build is mirrored on a static host as a recovery copy.
 
 ```
             public repo + recipe
@@ -21,14 +21,14 @@ A browser extension that refuses to run a dapp's code unless independent builder
  user's Firefox ── extension ── intercepts every response from a supported origin
                     │            hash → in an accepted release? → allow / BLOCK
                     ▼
-            Swarm: verified build (recovery copy, diff source)
+            Mirror on any static host: verified build (recovery copy, diff source)
 ```
 
 ## Repo layout (pnpm workspace, TypeScript, Node 22+)
 
 ```
 packages/core/        formats, canonical JSON, hashing, attestation sign/verify, policy evaluation (pure, no I/O)
-packages/registry/    Arkiv read/write + Swarm upload/fetch (I/O lives here)
+packages/registry/    Arkiv read/write + mirror URLs (I/O lives here)
 apps/cli/             rebuilder: recipe → build → manifest → attest → publish
 apps/extension/       Firefox MV3 extension: sync, intercept, verify, block, UI
 action/               GitHub Action (composite) wrapping apps/cli
@@ -50,7 +50,7 @@ Rules that keep work parallel:
 | core (formats, hashing, signatures, policy evaluation) | Arya | `docs/formats.md` |
 | extension enforcement (intercept, verify, block, sync) | Arya | `docs/extension.md` |
 | CLI rebuilder + recipes | Varun | `docs/cli-registry.md` |
-| registry (Arkiv + Swarm) | Varun | `docs/cli-registry.md` |
+| registry (Arkiv + mirror URLs) | Varun | `docs/cli-registry.md` |
 | GitHub Action | Varun | `docs/cli-registry.md` |
 | extension UI (badge, popup, blocked page, diff) | Yuvraaj | `docs/extension.md` §UI |
 | demo server + attacks | Yuvraaj | `docs/demo.md` |
@@ -65,7 +65,6 @@ The extension ships with one hardcoded **curator address**. The curator publishe
 |---|---|---|
 | EF CROPS | whole product; README "CROPS" section | lead property: Secure, structural (works without the dapp team) |
 | Arkiv Mirror | `packages/registry` writes, extension reads | re-runnable import (`unforged publish`), user-visible read (badge), schema + friction docs |
-| Swarm bonus | verified build upload; recovery + diff | openable Swarm reference in README |
 | ENSv2 (optional) | policy mirrored in ENS text records | only if M14 is reached |
 
 ## Out of scope for the hackathon

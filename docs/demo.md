@@ -30,9 +30,9 @@ A small script that wraps `window.ethereum.request` and, for `eth_sendTransactio
 | 0:20 | Extension **off**, `attack swap`, click Stake: the wallet shows the attacker's address | the attack works |
 | 0:45 | `attack reset`, extension **on**: badge 🟢, popup shows "release 0.161.0, verified by 3 independent builders" | normal day |
 | 1:05 | `attack swap`, reload: badge 🔴, blocked page, diff shows the injected lines | caught before it runs |
-| 1:35 | "Open verified copy": Swarm copy loads, 🟢, stake works | recovery |
+| 1:35 | "Open verified copy": mirror copy loads, 🟢, stake works | recovery |
 | 1:55 | `attack hijack`: blocked instantly | DNS hijack |
-| 2:10 | Arkiv explorer: three attestation entities, same `manifest_root`. Swarm reference | proof is public |
+| 2:10 | Arkiv explorer: three attestation entities, same `manifest_root`. Mirror reference | proof is public |
 | 2:30 | Study slide: 3 of 5 buildable dapps reproducible out of the box | it's real, today |
 | 2:50 | Close: "With this installed, Bybit's signers would have seen a red screen." | |
 

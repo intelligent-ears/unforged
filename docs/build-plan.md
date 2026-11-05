@@ -2,7 +2,7 @@
 
 **Roles**
 - **Arya: engine and security.** `packages/core`, extension enforcement, integration, threat-model Q&A.
-- **Varun: chain and data.** CLI rebuilder, recipes, Arkiv, Swarm, GitHub Action, optional ENS.
+- **Varun: chain and data.** CLI rebuilder, recipes, Arkiv, verified mirror, GitHub Action, optional ENS.
 - **Yuvraaj: product and story.** Extension UI, demo environment, README and sponsor docs, deck, video.
 
 Each milestone has one owner, one Claude Code prompt (`docs/prompts.md`, same number) and one acceptance test. A milestone is done only when its test passes and the work is committed.
@@ -14,10 +14,10 @@ Each milestone has one owner, one Claude Code prompt (`docs/prompts.md`, same nu
 | H0–1 | **M0** repo scaffold, push docs + CLAUDE.md | toolchain check (Node 22/24, pnpm, yarn), fund builder wallets | testnet wallet, Firefox dev profile |
 | H1–4 | **M1** core formats + crypto | **M2** CLI `build` + manifest (Lido) | **M3** demo server + attack modes (any static site first) |
 | H4–10 | **M4** extension: intercept + hash + log | M2 cont. → **M6** `attest` + Arkiv publish/read + policy | **M7** UI: badge, popup, blocked page (mocked state) |
-| H10–16 | **M5** extension: verify + block (local snapshot fixture) | M6 cont. → **M8** Swarm upload + gateway URLs | M7 cont. → **M10** diff panel |
+| H10–16 | **M5** extension: verify + block (local snapshot fixture) | M6 cont. → **M8** verified mirror + gateway URLs | M7 cont. → **M10** diff panel |
 | H16–20 | **M9** sync from Arkiv + recovery origin | 3 builders publish Lido attestations (one via Action in a separate org) | **M11** malicious payload + wallet flow on testnet |
 | **H20** | **Integration checkpoint: full demo flow end to end, all three together** | | |
-| H20–26 | hardening: acceptance tests 1–6, cache/service-worker edge cases | **M12** GitHub Action | **M13** README: CROPS section, Arkiv schema/friction, Swarm section, AI disclosure |
+| H20–26 | hardening: acceptance tests 1–6, cache/service-worker edge cases | **M12** GitHub Action | **M13** README: CROPS section, Arkiv schema/friction, mirror section, AI disclosure |
 | H26–30 | optional **M15** Chrome detect mode | optional **M14** ENS policy records | deck v1, study slide |
 | **H30** | **Feature freeze. Record the backup demo video** | | |
 | H30–33 | fix only freeze-blocking bugs; rehearse Q&A | ENS/Action polish only if green | video edit (Arya reviews), deck v2 |
@@ -36,12 +36,12 @@ Each milestone has one owner, one Claude Code prompt (`docs/prompts.md`, same nu
 | M5 | Arya | Verify + block from a fixture snapshot | Acceptance tests 1–4 in `extension.md` pass with the snapshot loaded from a JSON fixture |
 | M6 | Varun | Attest + Arkiv | 3 attestation entities on Tiramisu from 3 keys; `fetchAttestations` returns them; explorer links in the README |
 | M7 | Yuvraaj | UI shell | Popup and blocked page render all four verdict levels from mocked `TabState` |
-| M8 | Varun | Swarm | Lido `out/` uploaded; `gatewayUrl(gateway, ref, "/index.html")` opens; ref stored in the attestation |
-| M9 | Arya | Sync + recovery | Fresh profile → sync → 🟢 without any fixture; "Open verified copy" loads from Swarm and verifies |
+| M8 | Varun | Verified mirror | Lido `out/` on GitHub Pages; `unforged mirror-check` passes; `gatewayUrl(gateway, ref, "/index.html")` opens; ref stored in the attestation |
+| M9 | Arya | Sync + recovery | Fresh profile → sync → 🟢 without any fixture; "Open verified copy" loads from the mirror and verifies |
 | M10 | Yuvraaj | Diff panel | Blocked page shows a readable diff of the swapped chunk, injected lines highlighted |
 | M11 | Yuvraaj | Payload + wallet | Extension off: the wallet prompt shows `ATTACKER_ADDRESS`. Extension on: the page is blocked before the prompt |
 | M12 | Varun | GitHub Action | Workflow run in a second GitHub org publishes a valid attestation |
-| M13 | Yuvraaj | Sponsor docs | README has CROPS, Arkiv (wallets + one query), Swarm (openable ref) and AI-use sections; `/arkiv/schema.md`, `/arkiv/friction.md` exist |
+| M13 | Yuvraaj | Sponsor docs | README has CROPS, Arkiv (wallets + one query), mirror (openable ref) and AI-use sections; `/arkiv/schema.md`, `/arkiv/friction.md` exist |
 | M14 | Varun | ENS (optional) | Policy text records on Sepolia; a delegated key can set only the builder-list record |
 | M15 | Arya | Chrome detect (optional) | On Chrome, a swapped chunk shows a red warning and holds `eth_sendTransaction` |
 
@@ -69,7 +69,6 @@ Spikes go in **throwaway repos**, not the project repo.
 | Arya | Firefox spike: a tiny extension that hashes one page's JS with `filterResponseData` and blocks a modified file | 30 Oct |
 | Arya | Pick the project name | 30 Oct |
 | Varun | Arkiv: get GLM from the Hub faucet, write and read one test entity on Tiramisu | 30 Oct |
-| Varun | Swarm: upload a folder with bee-js, open via a gateway; ask Swarm's team how postage stamps work at the event | 31 Oct |
 | Varun | Safe{Wallet}: build twice on a 16 GB+ machine and compare | 1 Nov |
 | Varun | Create and fund 3 builder wallets + 1 curator wallet on Tiramisu | 2 Nov |
 | Yuvraaj | Pick the demo testnet (one the Lido widget supports) and list public RPC URLs for the recipe's `env`; testnet wallet with testnet ETH; Firefox dev profile | 31 Oct |

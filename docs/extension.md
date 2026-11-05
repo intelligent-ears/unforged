@@ -39,7 +39,7 @@ For every request whose **tab top-level origin** is in a policy:
   - Likewise, a 0-byte body from a request whose filter errored or was interrupted is blocked but never recorded as `hash-mismatch`: an empty body there means the download failed, not that the server sent an empty file. A complete empty response is checked like any other. The pure rule is `countsAsEvidence` in `navigation.ts`.
 - Never forward partial data before the decision.
 
-**Recovery origin:** requests to `policy.recovery.gateway + swarmRef + "/..."` are treated as files of that release, with the path being the part after the ref. They are verified the same way, so an untrusted gateway can't tamper.
+**Recovery origin:** `swarmRef` is a mirror reference (any static host; verified byte-for-byte), field name kept for compatibility. Requests to `policy.recovery.gateway + swarmRef + "/..."`, which is `gatewayUrl(gateway, ref, path)`, are treated as files of that release, with the path being the part after the ref. They are verified the same way, so an untrusted gateway can't tamper.
 
 **Per-tab state** (in memory, mirrored to `storage.session`): `TabState` from `formats.md` §6. Also keep the first 200 KB of each blocked script body (in memory only) for the diff panel. Reset on top-level navigation.
 
@@ -64,8 +64,8 @@ All UI reads state through the messages above (`browser.runtime.sendMessage`). T
 |---|---|
 | Toolbar badge (`browser.action`) | 🟢 "OK" / 🔴 "!" / grey. Colour per verdict level |
 | Popup | dapp, release, commit (short), builders who attested (k of n), files checked, accepted config values (e.g. RPC hosts), last sync time. On a `mismatch`: the blocked files and a "See details" button that opens `blocked.html?tab=<id>` in that tab (hidden when the tab is already there) |
-| `blocked.html` | Big red header "Blocked: this dapp's code doesn't match its public source". List of blocked files with reason. **Diff panel** for the first blocked script. Buttons: "Open verified copy" (Swarm) and "Go back" |
-| Diff panel | Get the blocked body with `getBlockedBody`. Fetch the verified file from Swarm by path (gateway and ref from `getSnapshotSummary`), check its hash against the manifest, pretty-print both with `js-beautify`, show a unified diff (`diff` npm package, `createTwoFilesPatch`). Highlight added lines. Cap at 400 lines |
+| `blocked.html` | Big red header "Blocked: this dapp's code doesn't match its public source". List of blocked files with reason. **Diff panel** for the first blocked script. Buttons: "Open verified copy" (the mirror) and "Go back" |
+| Diff panel | Get the blocked body with `getBlockedBody`. Fetch the verified file from the mirror by path (gateway and ref from `getSnapshotSummary`), check its hash against the manifest, pretty-print both with `js-beautify`, show a unified diff (`diff` npm package, `createTwoFilesPatch`). Highlight added lines. Cap at 400 lines |
 
 Blocked files are labelled by path (a third-party script keeps its host). The dapp's `/` and `/index.html` read `/ (start page)` and `/index.html (start page)`; other paths are shown as they are.
 
@@ -81,5 +81,5 @@ MV3 Chrome can't read response bodies. Detect-and-warn instead: a content script
 2. `demo attack swap`: one chunk replaced. That script is blocked before execution, the badge turns red, the tab goes to the blocked page, and the blocked page shows the diff.
 3. `demo attack inject`: an extra `<script src="http://localhost:9090/evil.js">` is added. Blocked as third-party, and because `index.html` no longer matches.
 4. `demo attack hijack`: the whole site is served from the attacker directory. The document is blocked and the blocked page appears.
-5. "Open verified copy" loads the Swarm copy and it verifies 🟢.
+5. "Open verified copy" loads the mirror copy and it verifies 🟢.
 6. Turn the network off after a sync: verdicts still work from the snapshot.

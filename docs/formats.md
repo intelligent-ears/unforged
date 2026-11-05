@@ -76,11 +76,11 @@ All entities: `project = "unforged"` (str, indexed), created `readonly`, `expira
 | `commit` | str | yes | 40-hex |
 | `manifest_root` | str | yes | 64-hex |
 | `recipe_digest` | str | no | 64-hex |
-| `swarm_ref` | str | no | 64-hex, or `none` |
+| `swarm_ref` | str | no | mirror reference (any static host; verified byte-for-byte), field name kept for compatibility: a folder name on the policy's `recovery.gateway`, matching `[a-z0-9][a-z0-9.-]*`, or `none` |
 | `content_type` | str | no | `application/gzip` |
 | `payload` | bytes | no | `gzip(canonicalJSON({ attestation: SignedAttestation, manifest: Manifest }))` |
 
-`payload` must stay under 120 KB after gzip. If larger, store the manifest on Swarm and put only `{attestation, manifestSwarmRef}` in it.
+`payload` must stay under 120 KB after gzip; the CLI refuses a larger one.
 
 **policy** (created by the curator)
 
@@ -102,12 +102,12 @@ interface Policy {
   threshold: number;                 // k
   acceptLatest: number;              // accept only the newest m attested releases (downgrade protection)
   thirdParty: Record<string /*origin*/, Record<string /*path*/, string /*sha256*/>>; // pinned external scripts; anything else is blocked
-  recovery: { gateway: string };     // Swarm gateway base, e.g. "https://<gateway>/bzz/"
+  recovery: { gateway: string };     // mirror base URL: https, ending in "/", e.g. "https://intelligent-ears.github.io/unforged-mirror/"
   configPins?: Record<string /*served path*/, string /*sha256*/>; // the only way a config file (§5) is accepted
 }
 ```
 
-`configPins` is signed by the curator with the rest of the policy. A config file not listed here is blocked, so changing a deployment's config means publishing a new policy version.
+A file of a mirrored release is at `gatewayUrl(recovery.gateway, ref, path)`. `configPins` is signed by the curator with the rest of the policy. A config file not listed here is blocked, so changing a deployment's config means publishing a new policy version.
 
 Reads are always scoped with `.createdBy(address)`, and entities that aren't `readonly` are dropped, because a non-readonly entity can be edited after a transfer. `project` and `entity_type` are namespaces anyone can write, not authentication.
 
@@ -145,7 +145,7 @@ interface AcceptedRelease {
   manifest: Manifest;
   builders: `0x${string}`[];         // allowlisted builders who signed this exact root
   builtAt: string;                   // newest builtAt among them
-  swarmRefs: string[];               // from the attestations' swarm_ref attributes ("none" dropped)
+  swarmRefs: string[];               // mirror reference (any static host; verified byte-for-byte), field name kept for compatibility. From the attestations' swarm_ref attributes ("none" dropped)
 }
 
 interface TabState {                 // what the UI reads via getTabState

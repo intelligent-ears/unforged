@@ -6,21 +6,20 @@
 |---|---|
 | `unforged build <recipe.yaml>` | Clone `repo` at `commit` (shallow) into `recipe.buildPath`, write `files`, write `env` to `envFile`, run `install` then `build` using the pinned Node, then hash `output` into a Manifest (config files go to `manifest.config`, not `files`). Writes `manifest.json` and `build-info.json` (`{ manifestRoot, node, packageManager, os, builtAt }`, from the first build with `--check`) and prints `manifestRoot` |
 | `unforged attest <manifest.json> <recipe.yaml> [--toolchain-from-host]` | Build the Statement, sign the digest with `BUILDER_PRIVATE_KEY` (env var, never logged), write `attestation.json`. `toolchain.node`, `toolchain.os` and `builtAt` come from the `build-info.json` beside the manifest. Refuses if it describes another manifest, or if it is missing unless `--toolchain-from-host` records the current machine and time instead |
-| `unforged publish <attestation.json> <manifest.json> [--out-dir <dir>]` | Optionally upload `out-dir` to Swarm (gets `swarm_ref`), then create the Arkiv `attestation` entity. Idempotent: if an entity with the same `manifest_root` already exists for this creator, print it and exit 0 |
+| `unforged mirror-check <manifest.json> --gateway <url> --ref <name>` | Fetch every path in `manifest.files` through `gatewayUrl`, hash each body, and print `N/total match` plus up to 20 mismatches or fetch errors. Paths in `manifest.config` only need to answer 200, because their bytes are pinned in the policy. Exit 0 if all match, 3 otherwise. 8 requests at once, 30s timeout per file, one retry on a network error |
+| `unforged publish <attestation.json> <manifest.json> [--mirror-ref <name> --gateway <url>]` | Create the Arkiv `attestation` entity. With a mirror, run the mirror check first and refuse (exit 3) unless it passes, then store the ref in `swarm_ref`. Without one, `swarm_ref` is `none`. Idempotent: if an entity with the same `manifest_root` already exists for this creator, print it and exit 0. That entity is readonly, so a ref it doesn't already hold is not recorded, and publish warns on stderr |
 | `unforged policy <policy.json>` | Curator only. Create a `policy` entity with `version = previous + 1` |
 | `unforged verify <url>` | Debug helper: fetch a live site's files listed in the accepted manifest and report matches. Not used by the extension |
 
 Pinned Node: the CLI checks `node --version` against `recipe.node` and refuses to build on a mismatch, unless `--allow-node-mismatch` is given (recorded in `predicate.toolchain`).
 
-Exit codes: 0 ok, 2 build failed, 3 nondeterminism detected (`--check` builds twice and compares), 4 registry error.
+Exit codes: 0 ok, 1 input refused, 2 build failed, 3 nondeterminism detected (`--check` builds twice and compares) or a mirror that doesn't match, 4 registry error.
 
 Known nondeterminism: Lido's Next.js 12 build sometimes writes `_buildManifest.js` with two minified parameter names swapped (2 of 12 builds in our study). The code is equivalent but the hash differs. If `--check` reports only that file, rebuild. With 3 builders and threshold 2, at least two always agree, because there are only two forms.
 
 ## Registry package (`packages/registry`)
 
-Two entry points, because the extension bundles this package and must not pull in Node code:
-- `@unforged/registry` (browser-safe, used by the extension and CLI): Arkiv functions + `gatewayUrl`.
-- `@unforged/registry/swarm` (Node only, used by the CLI): `uploadDir`.
+One browser-safe entry point, `@unforged/registry`, used by the extension and CLI: Arkiv functions + `gatewayUrl`. The extension bundles it, so it must not pull in Node code.
 
 ```ts
 // Arkiv (SDK @arkiv-network/sdk ~1.0.1, chain: rabdi, id 7794095)
@@ -30,13 +29,13 @@ rabdiPrepare(account, accessKey): Prepare // explicit nonce, gas and gasPrice fo
 publishAttestation(walletClient, payload: { attestation, manifest }, attrs, prepare?): Promise<{ entityKey, txHash }>
 publishPolicy(walletClient, policy, version, prepare?): Promise<{ entityKey, txHash }>
 // Reads take `source`: a client, or { accessKey? }. No key or "" means the public RPC. All retry HTTP 429 (see below).
-findAttestationKey(source, creator, manifestRoot): Promise<entityKey | null> // publish's idempotency check
+findAttestation(source, creator, manifestRoot): Promise<{ entityKey, swarmRef } | null> // publish's idempotency check
 fetchPolicies(source, curator): Promise<{ version: number; policy: Policy }[]> // highest version first
 fetchAttestations(source, builder, dapp, skipKeys?: Set<string>): Promise<{ entityKey, creator, attestation, manifest, swarmRef }[]>
   // lists keys + attributes first, then fetches payloads only for keys not in skipKeys (incremental sync)
+// Mirrors. gateway: https URL ending in "/". ref: [a-z0-9][a-z0-9.-]*. path: starts with "/".
+// Returns gateway + ref + path. Throws on anything that could leave the ref's folder.
 gatewayUrl(gateway, ref, path): string
-// Swarm (@ethersphere/bee-js), Node only
-uploadDir(beeUrl, batchId, dir): Promise<string /* swarm ref */>
 ```
 Gzip with `fflate` (works in both Node and the browser).
 SDK facts that save research time:
@@ -52,11 +51,20 @@ SDK facts that save research time:
 - Explorer: `https://rabdi.explorer.arkiv.network`.
 - Network resets can invalidate entity keys without changing the chain ID, so republish rather than assume a key survives.
 - Install Arkiv's agent skills for Claude Code before starting: `npx skills add https://github.com/arkiv-network/skills`.
-- Swarm: `new Bee(url).uploadFilesFromDirectory(batchId, dir, { indexDocument: "index.html" })` returns `reference.toHex()`. Needs a Bee node with a postage batch. Get the event setup from Swarm's team (pre-event task).
+
+## Verified mirror
+
+A recovery copy of an attested build can live on any static host; we use GitHub Pages. `swarm_ref` and `swarmRefs` hold a mirror reference (any static host; verified byte-for-byte), field name kept for compatibility. It is a folder name on the policy's `recovery.gateway`, e.g. `https://intelligent-ears.github.io/unforged-mirror/`. The host is untrusted: the CLI won't attest a mirror that doesn't match, and the extension re-verifies every byte.
+
+1. `scripts/publish-mirror.sh <out-dir> <ref> <manifest.json>` verifies `out-dir` against the manifest and refuses on a changed, missing or unlisted file. It then commits the build to `<ref>/` on the `gh-pages` branch of `intelligent-ears/unforged-mirror`, with `<ref>/LICENSE` (from the source repo's pinned commit), `<ref>/SOURCE.md` and a root `.nojekyll`, so that Pages serves `_next/`. It never pushes: it prints the command for a human to run. It needs a built CLI. `UNFORGED_RECIPE`, `UNFORGED_MIRROR_DIR` and `UNFORGED_MIRROR_REMOTE` override the recipe (default `recipes/<dapp>@<release>.yaml`), clone location and remote.
+2. Once Pages has deployed: `unforged mirror-check manifest.json --gateway https://intelligent-ears.github.io/unforged-mirror/ --ref <ref>`.
+3. `unforged publish attestation.json manifest.json --mirror-ref <ref> --gateway https://intelligent-ears.github.io/unforged-mirror/`.
+
+Publish the attestation with its ref the first time: entities are readonly, so one already published with `none` can't gain a ref. A ref can't be `none`, which reads back as no mirror, or longer than 128 bytes.
 
 ## GitHub Action (`action/action.yml`, composite)
 
-Inputs: `recipe` (path), `arkiv-rpc` (optional), `bee-url`, `postage-batch` (optional). Secret: `BUILDER_PRIVATE_KEY`. Steps: setup-node with `recipe.node` → `unforged build` → `unforged attest` → `unforged publish`. Outputs `manifest-root`, `entity-key`, `swarm-ref`.
+Inputs: `recipe` (path), `arkiv-rpc` (optional), `mirror-ref`, `gateway` (optional). Secret: `BUILDER_PRIVATE_KEY`. Steps: setup-node with `recipe.node` → `unforged build` → `unforged attest` → `unforged publish`. Outputs `manifest-root`, `entity-key`, `mirror-ref`.
 
 Independence rule (README): builders run this Action in **their own** GitHub organisations with their own keys. The dapp team's own CI produces at most a vendor attestation, never an independent one.
 
