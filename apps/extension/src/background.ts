@@ -4,7 +4,7 @@ import type { Blocked, TabState, Verdict } from "@unforged/core";
 import snapshotJson from "../fixtures/snapshot.json";
 import { classify, originOf } from "./classify.js";
 import { decide, newTab, type Snapshot, type TabRecord } from "./decide.js";
-import { keepsTabState, showsBlockedPage } from "./navigation.js";
+import { countsAsEvidence, keepsTabState, showsBlockedPage } from "./navigation.js";
 import { snapshotSummary } from "./summary.js";
 
 // Bundled fixture until M9 replaces it with the snapshot synced from Arkiv.
@@ -107,14 +107,22 @@ function filterBody(details: browser.webRequest._OnBeforeRequestDetails, tabOrig
   const filter = browser.webRequest.filterResponseData(details.requestId);
   const chunks: Uint8Array[] = [];
   const tab = tabFor(details.tabId); // the page this request belongs to, even if the tab moves on
+  let failed = false;
 
   filter.ondata = (event) => {
     chunks.push(new Uint8Array(event.data));
   };
 
   filter.onstop = async () => {
+    const body = concat(chunks);
+    const interrupted = failed || Boolean(filter.error);
+    if (!countsAsEvidence({ blockedPageShown: tab.blockedPageShown, interrupted, bodyBytes: body.byteLength })) {
+      // Cut off by the move to the blocked page, or by a failed request: block, record nothing.
+      console.warn("unforged: blocked, not recorded (interrupted)", { url: details.url, bytes: body.byteLength });
+      closeEmpty(filter);
+      return;
+    }
     try {
-      const body = concat(chunks);
       const decision = await decide(snapshot, tab.record, { url: details.url, type: details.type, tabOrigin, body });
       if (decision.allow) {
         filter.write(body);
@@ -134,6 +142,7 @@ function filterBody(details: browser.webRequest._OnBeforeRequestDetails, tabOrig
   };
 
   filter.onerror = () => {
+    failed = true;
     console.error("unforged: stream filter error", { url: details.url, error: filter.error });
     if (details.type === "main_frame") tab.documentPending = false;
   };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBlockedPage, keepsTabState, showsBlockedPage } from "./navigation.js";
+import { countsAsEvidence, isBlockedPage, keepsTabState, showsBlockedPage } from "./navigation.js";
 
 const POLICY = ["http://localhost:8080"];
 const BLOCKED = "moz-extension://abc/blocked.html";
@@ -49,5 +49,26 @@ describe("showsBlockedPage", () => {
 
   it("does not for a blocked xmlhttprequest, which the page can survive", () => {
     expect(showsBlockedPage("xmlhttprequest")).toBe(false);
+  });
+});
+
+describe("countsAsEvidence", () => {
+  const finished = { blockedPageShown: false, interrupted: false, bodyBytes: 120 };
+
+  it("counts a response that finished normally on a live page load", () => {
+    expect(countsAsEvidence(finished)).toBe(true);
+  });
+
+  it("counts a genuine empty file: an empty body that wasn't interrupted is still checked", () => {
+    expect(countsAsEvidence({ ...finished, bodyBytes: 0 })).toBe(true);
+  });
+
+  it("ignores anything finishing after the page load went to the blocked page", () => {
+    expect(countsAsEvidence({ ...finished, blockedPageShown: true })).toBe(false);
+    expect(countsAsEvidence({ ...finished, blockedPageShown: true, bodyBytes: 0 })).toBe(false);
+  });
+
+  it("ignores an empty body from an errored or interrupted filter", () => {
+    expect(countsAsEvidence({ ...finished, interrupted: true, bodyBytes: 0 })).toBe(false);
   });
 });

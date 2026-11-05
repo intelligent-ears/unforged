@@ -92,6 +92,24 @@ describe("blockedFileLabel", () => {
     expect(blockedFileLabel({ url, reason: "third-party", actual: HASH })).toBe("evil.example:9090/evil.js");
   });
 
+  it.each([
+    ["http://localhost:8080/", "/ (start page)"],
+    ["http://localhost:8080/index.html", "/index.html (start page)"],
+    ["http://localhost:8080/?ref=x", "/?ref=x (start page)"],
+  ])("marks the start page %s", (url, label) => {
+    expect(blockedFileLabel({ url, reason: "hash-mismatch", actual: HASH })).toBe(label);
+  });
+
+  it("keeps other paths as they are, including nested index pages", () => {
+    const url = "http://localhost:8080/wrap/index.html";
+    expect(blockedFileLabel({ url, reason: "unknown-file", actual: HASH })).toBe("/wrap/index.html");
+  });
+
+  it("does not call a third-party root a start page", () => {
+    const url = "http://evil.example/";
+    expect(blockedFileLabel({ url, reason: "third-party", actual: HASH })).toBe("evil.example/");
+  });
+
   it("falls back to the raw text when the url cannot be parsed", () => {
     expect(blockedFileLabel({ url: "not a url", reason: "unknown-file", actual: HASH })).toBe("not a url");
   });

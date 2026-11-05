@@ -35,7 +35,8 @@ For every request whose **tab top-level origin** is in a policy:
 - Then, for a blocked `main_frame`, `sub_frame`, `script`, `stylesheet` or `worker`, send the tab to the blocked page: `browser.tabs.update(tabId, { url: browser.runtime.getURL("blocked.html") + "?tab=" + tabId })`. The page is broken anyway, and otherwise the user doesn't know why.
   - This happens once per page load, and only if the tab is still on the page that made the request and that page's own origin is the policy origin. A normal site embedding a policy-origin frame is not taken over.
   - A blocked `xmlhttprequest` for `.js` gets an empty body but stays on the page. The verdict still turns `mismatch`, and the popup's "See details" leads to the blocked page.
-  - Files still loading when the tab moves may not appear in the blocked list.
+  - Responses of that page load that finish after it went to the blocked page are still blocked (nothing is written), but they are not added to `TabState.blocked` or to the kept blocked bodies. Moving the tab aborts their downloads, so what arrives is a cut-off body, not evidence about the release: hashing it would list intact files as `hash-mismatch`. The blocked list therefore shows what was checked before the move, and may miss files still loading then.
+  - Likewise, a 0-byte body from a request whose filter errored or was interrupted is blocked but never recorded as `hash-mismatch`: an empty body there means the download failed, not that the server sent an empty file. A complete empty response is checked like any other. The pure rule is `countsAsEvidence` in `navigation.ts`.
 - Never forward partial data before the decision.
 
 **Recovery origin:** requests to `policy.recovery.gateway + swarmRef + "/..."` are treated as files of that release, with the path being the part after the ref. They are verified the same way, so an untrusted gateway can't tamper.
@@ -65,6 +66,8 @@ All UI reads state through the messages above (`browser.runtime.sendMessage`). T
 | Popup | dapp, release, commit (short), builders who attested (k of n), files checked, accepted config values (e.g. RPC hosts), last sync time. On a `mismatch`: the blocked files and a "See details" button that opens `blocked.html?tab=<id>` in that tab (hidden when the tab is already there) |
 | `blocked.html` | Big red header "Blocked: this dapp's code doesn't match its public source". List of blocked files with reason. **Diff panel** for the first blocked script. Buttons: "Open verified copy" (Swarm) and "Go back" |
 | Diff panel | Get the blocked body with `getBlockedBody`. Fetch the verified file from Swarm by path (gateway and ref from `getSnapshotSummary`), check its hash against the manifest, pretty-print both with `js-beautify`, show a unified diff (`diff` npm package, `createTwoFilesPatch`). Highlight added lines. Cap at 400 lines |
+
+Blocked files are labelled by path (a third-party script keeps its host). The dapp's `/` and `/index.html` read `/ (start page)` and `/index.html (start page)`; other paths are shown as they are.
 
 Copy tone: plain and calm. Never say "hacked". Say "doesn't match its public source".
 

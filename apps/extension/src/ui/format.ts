@@ -64,12 +64,18 @@ function parseUrl(value: string): URL | undefined {
   return URL.canParse(value) ? new URL(value) : undefined;
 }
 
-/** The file's path; a third-party script keeps its host, because the host is what's wrong. */
+const START_PAGES = new Set(["/", "/index.html"]);
+
+/**
+ * The file's path; a third-party script keeps its host, because the host is what's wrong. The
+ * dapp's own "/" and "/index.html" are named as the start page, since a bare "/" reads as nothing.
+ */
 export function blockedFileLabel({ url, reason }: Blocked): string {
   const parsed = parseUrl(url);
   if (!parsed) return url;
   const path = parsed.pathname + parsed.search;
-  return reason === "third-party" ? parsed.host + path : path;
+  if (reason === "third-party") return parsed.host + path;
+  return START_PAGES.has(parsed.pathname) ? `${path} (start page)` : path;
 }
 
 function scalarText(value: unknown): string {
