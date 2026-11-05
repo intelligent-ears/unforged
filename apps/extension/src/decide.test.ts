@@ -206,7 +206,7 @@ describe("decide", () => {
 });
 
 describe("fixture snapshot config pin", () => {
-  const genuine = readFileSync(new URL("../../../demo/site/runtime/window-env.js", import.meta.url));
+  const genuine = readFileSync(new URL("../fixtures/window-env.demo.js", import.meta.url));
   const flipped = enc(genuine.toString("utf8").replace('"ipfsMode":false', '"ipfsMode":true'));
   const snap = fixtureSnapshot as unknown as Snapshot;
   const lidoTab = () => ({ ...newTab(), lock: snap.dapps["lido-staking-widget"]!.releases[0] });
