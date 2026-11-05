@@ -185,7 +185,7 @@ describe("runBuild", () => {
 
     expect(info).toEqual({
       manifestRoot: root_,
-      node: process.version,
+      node: process.versions.node,
       packageManager: "yarn@9.9.9",
       os: `${process.platform}-${process.arch}`,
       builtAt: expect.any(String),

@@ -44,7 +44,7 @@ let recipePath: string;
 const BUILT_AT = "2026-11-05T17:26:52.000Z";
 
 async function buildInfo() {
-  return { manifestRoot: await manifestRoot(manifest), node: "v24.22.2", packageManager: "yarn@4.17.1", os: "linux-x64", builtAt: BUILT_AT };
+  return { manifestRoot: await manifestRoot(manifest), node: "24.22.2", packageManager: "yarn@4.17.1", os: "linux-x64", builtAt: BUILT_AT };
 }
 
 beforeEach(async () => {
@@ -79,7 +79,7 @@ describe("runAttest", () => {
   it("describes the build from build-info.json, not the signing", async () => {
     await attest();
     const { predicate } = written().statement;
-    expect(predicate.toolchain).toEqual({ node: "v24.22.2", packageManager: "yarn@4.17.1", os: "linux-x64" });
+    expect(predicate.toolchain).toEqual({ node: "24.22.2", packageManager: "yarn@4.17.1", os: "linux-x64" });
     expect(predicate.builtAt).toBe(BUILT_AT);
   });
 

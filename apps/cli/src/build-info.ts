@@ -23,7 +23,7 @@ export const currentOs = () => `${process.platform}-${process.arch}`;
 export async function describeBuild(manifest: Manifest, recipe: Recipe, builtAt: string): Promise<BuildInfo> {
   return {
     manifestRoot: await manifestRoot(manifest),
-    node: process.version,
+    node: process.versions.node,
     packageManager: recipe.packageManager,
     os: currentOs(),
     builtAt,
