@@ -23,7 +23,7 @@ For every request whose **tab top-level origin** is in a policy:
 | Request | Rule |
 |---|---|
 | Same-origin `main_frame`, `sub_frame`, `script`, `stylesheet`, `worker`, `script`-like `xmlhttprequest` for `.js` | Buffer the full body with `filterResponseData`, hash it, then `checkFile` against the tab's locked release |
-| Config file path (in `manifest.config`) | `checkConfig` instead of a hash |
+| Config file path (in `manifest.config`) | Hash must equal `policy.configPins[path]` **and** `checkConfig` must pass; otherwise `config-invalid` |
 | Cross-origin `script` / `worker` | Allowed only if origin + path is pinned in `policy.thirdParty` and the hash matches. Otherwise blocked |
 | Anything else (images, fonts, JSON API calls) | Pass through (not code) |
 

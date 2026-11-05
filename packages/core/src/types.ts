@@ -4,7 +4,7 @@
 export type Hex = `0x${string}`;
 export type Sha256 = string; // lowercase hex, 64 chars
 
-/** §5 Config files checked as data instead of by hash. */
+/** §5 Config file sanity rule. Acceptance also needs policy.configPins (§4). */
 export interface ConfigRule {
   kind: "window-env-json";
   allowedKeys: string[];
@@ -69,6 +69,7 @@ export interface Policy {
   acceptLatest: number; // m, downgrade protection
   thirdParty: Record<string, Record<string, Sha256>>; // origin -> path -> hash
   recovery: { gateway: string }; // Swarm gateway base, e.g. "https://<gateway>/bzz/"
+  configPins?: Record<string, Sha256>; // served config path -> hash; a config file is accepted only if pinned (§5)
 }
 
 /** Input to acceptReleases: one decoded Arkiv attestation entity. */

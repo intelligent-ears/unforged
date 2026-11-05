@@ -34,7 +34,7 @@ interface Manifest {
   release: string;
   commit: string;
   files: Record<string, string>;   // "/index.html" -> sha256 hex. Paths start with "/". Same shape as WEBCAT's `files`.
-  config: Record<string, ConfigRule>; // config files checked as data instead of by hash (§5). Not listed in `files`.
+  config: Record<string, ConfigRule>; // config files: pinned in the policy and checked by rule (§5). Not listed in `files`.
 }
 ```
 `manifestRoot = sha256(canonicalJSON(manifest))`.
@@ -103,8 +103,11 @@ interface Policy {
   acceptLatest: number;              // accept only the newest m attested releases (downgrade protection)
   thirdParty: Record<string /*origin*/, Record<string /*path*/, string /*sha256*/>>; // pinned external scripts; anything else is blocked
   recovery: { gateway: string };     // Swarm gateway base, e.g. "https://<gateway>/bzz/"
+  configPins?: Record<string /*served path*/, string /*sha256*/>; // the only way a config file (§5) is accepted
 }
 ```
+
+`configPins` is signed by the curator with the rest of the policy. A config file not listed here is blocked, so changing a deployment's config means publishing a new policy version.
 
 Reads are always scoped with `.createdBy(address)`, and entities that aren't `readonly` are dropped, because a non-readonly entity can be edited after a transfer. `project` and `entity_type` are namespaces anyone can write, not authentication.
 
@@ -119,7 +122,12 @@ interface ConfigRule {
   urlHostAllowlist?: string[];       // every string value that parses as a URL must use one of these hosts: host (with port), exact, case-insensitive
 }
 ```
-A config file passes if it parses exactly, has only allowed keys, contains only JSON primitives or arrays of primitives, and every URL host is allowlisted. The extension shows the accepted values in the popup.
+A config file is accepted only if **both** hold:
+
+1. its sha256 equals `policy.configPins[path]` (§4), and
+2. `checkConfig` passes: it parses exactly, has only allowed keys, contains only JSON primitives or arrays of primitives, and every URL host is allowlisted.
+
+A missing pin or a different hash blocks the file as `config-invalid`, even if `checkConfig` passes. `checkConfig` alone never grants acceptance: values that pass the rule can still be hostile (e.g. a flipped `ipfsMode`). It is a sanity check on the pinned bytes and supplies the values the popup shows.
 
 ## 6. Verdicts and UI state (extension)
 
