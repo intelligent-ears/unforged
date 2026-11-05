@@ -62,33 +62,37 @@ interface SignedAttestation {
 ```
 Verification: recover the signer from `signature` and the digest. It must equal `predicate.builder` **and** the Arkiv entity's `$creator`.
 
-## 4. Arkiv entities (Tiramisu, chain 7738577, SDK `@arkiv-network/sdk` >=0.8.1 <0.9)
+## 4. Arkiv entities (Rabdi, chain 7794095, SDK `@arkiv-network/sdk` ~1.0.1)
 
-All entities: `project = "unforged"`, created `readonly`, `expires = ExpirationTime.fromDays(365)`.
+All entities: `project = "unforged"` (str, indexed), created `readonly`, `expiration = ExpirationTime.max()`. Rabdi caps a lifetime at 7,884,000 blocks (about 182 days from inclusion) and SDK 1.0.1 rejects anything longer before sending. Written through unnamed schemas, so there is no `arkiv.schema` attribute. SDK 1.0 has no opaque entity body: the payload is a named `bytes` column, and its media type is a `str` column.
 
 **attestation** (created by a builder)
 
-| Attribute | Type | Value |
-|---|---|---|
-| `entity_type` | str | `attestation` |
-| `dapp` | str | `lido-staking-widget` |
-| `release` | str | `0.161.0` |
-| `commit` | str | 40-hex |
-| `manifest_root` | str | 64-hex |
-| `recipe_digest` | str | 64-hex |
-| `swarm_ref` | str | 64-hex, or `none` |
+| Attribute | Type | Indexed | Value |
+|---|---|---|---|
+| `entity_type` | str | yes | `attestation` |
+| `dapp` | str | yes | `lido-staking-widget` |
+| `release` | str | yes | `0.161.0` |
+| `commit` | str | yes | 40-hex |
+| `manifest_root` | str | yes | 64-hex |
+| `recipe_digest` | str | no | 64-hex |
+| `swarm_ref` | str | no | 64-hex, or `none` |
+| `content_type` | str | no | `application/gzip` |
+| `payload` | bytes | no | `gzip(canonicalJSON({ attestation: SignedAttestation, manifest: Manifest }))` |
 
-Payload: `gzip(canonicalJSON({ attestation: SignedAttestation, manifest: Manifest }))`, contentType `application/gzip`. Must stay under 120 KB after gzip. If larger, store the manifest on Swarm and put only `{attestation, manifestSwarmRef}` in the payload.
+`payload` must stay under 120 KB after gzip. If larger, store the manifest on Swarm and put only `{attestation, manifestSwarmRef}` in it.
 
 **policy** (created by the curator)
 
-| Attribute | Value |
-|---|---|
-| `entity_type` | `policy` |
-| `dapp` | `lido-staking-widget` |
-| `version` | u64, increasing; the extension uses the highest |
+| Attribute | Type | Indexed | Value |
+|---|---|---|---|
+| `entity_type` | str | yes | `policy` |
+| `dapp` | str | yes | `lido-staking-widget` |
+| `version` | u64 | yes | increasing; the extension uses the highest |
+| `content_type` | str | no | `application/gzip` |
+| `payload` | bytes | no | gzip of the canonical JSON below |
 
-Payload (gzip, canonical JSON):
+Payload:
 ```ts
 interface Policy {
   dapp: string;
@@ -102,7 +106,7 @@ interface Policy {
 }
 ```
 
-Reads are always scoped with `.createdBy(address)`. `project` and `entity_type` are namespaces anyone can write, not authentication.
+Reads are always scoped with `.createdBy(address)`, and entities that aren't `readonly` are dropped, because a non-readonly entity can be edited after a transfer. `project` and `entity_type` are namespaces anyone can write, not authentication.
 
 ## 5. Config files (configuration as data)
 

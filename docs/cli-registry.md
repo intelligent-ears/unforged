@@ -23,10 +23,14 @@ Two entry points, because the extension bundles this package and must not pull i
 - `@unforged/registry/swarm` (Node only, used by the CLI): `uploadDir`.
 
 ```ts
-// Arkiv (SDK @arkiv-network/sdk >=0.8.1 <0.9, chain: tiramisu, id 7738577)
-publishAttestation(walletClient, payload: { attestation, manifest }, attrs): Promise<{ entityKey, txHash }>
-publishPolicy(walletClient, policy, version): Promise<{ entityKey, txHash }>
-fetchPolicies(publicClient, curator): Promise<{ version: number; policy: Policy }[]>
+// Arkiv (SDK @arkiv-network/sdk ~1.0.1, chain: rabdi, id 7794095)
+createReadClient(accessKey = ""): keyless by default, which is what the extension uses
+createWriteClient(account, accessKey)
+rabdiPrepare(account, accessKey): Prepare // explicit nonce, gas and gasPrice for each write
+publishAttestation(walletClient, payload: { attestation, manifest }, attrs, prepare?): Promise<{ entityKey, txHash }>
+publishPolicy(walletClient, policy, version, prepare?): Promise<{ entityKey, txHash }>
+findAttestationKey(publicClient, creator, manifestRoot): Promise<entityKey | null> // publish's idempotency check
+fetchPolicies(publicClient, curator): Promise<{ version: number; policy: Policy }[]> // highest version first
 fetchAttestations(publicClient, builder, dapp, skipKeys?: Set<string>): Promise<{ entityKey, creator, attestation, manifest, swarmRef }[]>
   // lists keys + attributes first, then fetches payloads only for keys not in skipKeys (incremental sync)
 gatewayUrl(gateway, ref, path): string
@@ -35,10 +39,17 @@ uploadDir(beeUrl, batchId, dir): Promise<string /* swarm ref */>
 ```
 Gzip with `fflate` (works in both Node and the browser).
 SDK facts that save research time:
-- Write: `createWalletClient({ chain: tiramisu, account, transport: http() })`, then `walletClient.createEntity({ payload, contentType, attributes: {...}, expires: ExpirationTime.fromDays(365), flags: { readonly: true, permissionlessExtension: false } })`. It returns `{ entityKey, txHash, expiresAt }`. Check the receipt.
-- Read: `publicClient.select({ key: true, payload: true, attributes: true }).where(eq("project","unforged"), eq("entity_type","attestation"), eq("dapp", d)).createdBy(addr).limit(200).fetch()`. Pages hold at most 200; loop with `hasNextPage()` / `next()`.
-- Imports: `createPublicClient, createWalletClient, ExpirationTime` from `@arkiv-network/sdk`; `eq` from `@arkiv-network/sdk/query`; `tiramisu` from `@arkiv-network/sdk/chains`; `u64` from `@arkiv-network/sdk/attr`.
-- Limits: payload ≤128 KiB, string attribute ≤128 bytes, ≤30 user attributes, lowercase `snake_case` names. Gas is paid in test GLM (Hub faucet).
+- Clients: `rabdi({ accessKey })` from `@arkiv-network/sdk/chains` and `http()` from viem. The key is a path segment of the RPC URL, and viem quotes that URL in errors, so never log a raw transport error. The CLI reads the key from `ARKIV_API_KEY` and `apps/cli/src/registry.ts` strips URLs and the key from anything it prints. An access key neither signs nor pays gas.
+- Keyless reads: `rabdi({ accessKey: "" })` uses the public endpoint, which is "heavily rate limited" and can answer HTTP 429. Arkiv publishes no number for it. The extension always reads this way and must treat a 429 as a failed sync, never as an empty result. With a key: 100,000,000 quota units per key; each `arkiv_query` costs 10, other calls (including `arkiv_getEntity`) cost zero under current provider policy.
+- Write: `walletClient.createEntity(schema, values, { expiration: ExpirationTime.max(), flags: { readonly: true, permissionlessExtension: false } }, txParams)`. It returns `{ entityKey, txHash, expiresAt }` and throws if the receipt reverted. `fromDays(365)` is rejected: the maximum lifetime is about 182 days. Longer retention needs `extendEntity` before expiry, which the owner can still do on a readonly entity.
+- Transaction parameters: `rabdiPrepare` estimates the exact write through a wallet that can't sign or send, then uses `gas = max(1,000,000, 2 x estimate)`, the latest nonce and the current gas price, refusing if a transaction is pending, the gas is over half the block limit, or the balance can't cover it. Arkiv measured default estimation reverting from gas exhaustion on Rabdi. Writes are not retried; after a failure, check the explorer first.
+- Read: `publicClient.select({ $key: true, $creationFlags: true, swarm_ref: true }).where([eq("project","unforged"), eq("entity_type","attestation"), eq("dapp", d)]).createdBy(addr).orderBy(asc("$key")).limit(100).fetch()`. Rows are flat and each value is `{ type, value }`. Bytes values are hex. `arkiv_getEntity` (`client.getEntity(key)`) returns everything under `$attributes`.
+- Pages hold at most 100 and there is no cursor, `hasNextPage()` or `next()`. Walk by keyset: add `gt("$key", key(last))` until a page comes back short. Selecting without `from(schema)` means a malformed entity can't hide the rest of a page. A multi-page walk is not one snapshot.
+- Only `.indexed()` columns can be filtered, per column, and readonly entities can't gain an index later.
+- Imports: `createPublicClient, createWalletClient, ExpirationTime` from `@arkiv-network/sdk`; `asc, eq, gt` from `@arkiv-network/sdk/query`; `rabdi` from `@arkiv-network/sdk/chains`; `defineSchema, bytes, key, str, u64` from `@arkiv-network/sdk/schema`.
+- Limits: bytes ≤128 KiB per create, string attribute ≤128 bytes, ≤32 attributes. Gas is paid in test GLM (Hub faucet); access keys come from the Hub.
+- Explorer: `https://rabdi.explorer.arkiv.network`.
+- Network resets can invalidate entity keys without changing the chain ID, so republish rather than assume a key survives.
 - Install Arkiv's agent skills for Claude Code before starting: `npx skills add https://github.com/arkiv-network/skills`.
 - Swarm: `new Bee(url).uploadFilesFromDirectory(batchId, dir, { indexDocument: "index.html" })` returns `reference.toHex()`. Needs a Bee node with a postage batch. Get the event setup from Swarm's team (pre-event task).
 
