@@ -4,6 +4,7 @@
 /** The subset of webRequest details that classification reads. */
 export interface RequestInfo {
   tabId: number;
+  method: string;
   type: string;
   url: string;
   documentUrl?: string;
@@ -16,6 +17,9 @@ export interface Classification {
   /** True if the response body must be buffered and checked. */
   filter: boolean;
 }
+
+/** Methods whose responses carry no body: nothing to verify or execute. */
+const BODYLESS_METHODS = new Set(["HEAD", "OPTIONS"]);
 
 // "worker" is not a Firefox ResourceType today; listed so it is checked if Firefox ever reports it.
 const CODE_TYPES = new Set(["main_frame", "sub_frame", "script", "stylesheet", "worker"]);
@@ -46,6 +50,7 @@ export function tabOriginFor(details: RequestInfo, recordedOrigin: string | unde
 
 /** Code-carrying request types. Cross-origin files are included: they are checked later as third-party. */
 export function isCodeRequest(details: RequestInfo): boolean {
+  if (BODYLESS_METHODS.has(details.method.toUpperCase())) return false;
   if (CODE_TYPES.has(details.type)) return true;
   return details.type === "xmlhttprequest" && pathEndsInJs(details.url);
 }

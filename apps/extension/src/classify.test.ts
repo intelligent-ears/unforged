@@ -4,7 +4,7 @@ import { classify, type RequestInfo } from "./classify.js";
 const POLICY = ["http://localhost:8080"];
 
 function req(over: Partial<RequestInfo>): RequestInfo {
-  return { tabId: 1, type: "script", url: "http://localhost:8080/app.js", ...over };
+  return { tabId: 1, method: "GET", type: "script", url: "http://localhost:8080/app.js", ...over };
 }
 
 describe("classify", () => {
@@ -65,5 +65,12 @@ describe("classify", () => {
 
   it("filters a worker on a policy tab", () => {
     expect(classify(req({ type: "worker" }), "http://localhost:8080", POLICY).filter).toBe(true);
+  });
+
+  it("does not filter HEAD or OPTIONS: their responses have no body", () => {
+    const env = { url: "http://localhost:8080/runtime/window-env.js" };
+    expect(classify(req({ ...env, method: "HEAD" }), "http://localhost:8080", POLICY).filter).toBe(false);
+    expect(classify(req({ ...env, method: "OPTIONS" }), "http://localhost:8080", POLICY).filter).toBe(false);
+    expect(classify(req({ ...env, method: "GET" }), "http://localhost:8080", POLICY).filter).toBe(true);
   });
 });

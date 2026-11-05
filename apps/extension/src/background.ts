@@ -1,6 +1,6 @@
 // Background event page: buffers code responses on policy tabs, decides with decide.ts and
 // applies the result (extension.md "Background: enforcement"). Also answers the UI's messages.
-import type { TabState, Verdict } from "@unforged/core";
+import type { Blocked, TabState, Verdict } from "@unforged/core";
 import snapshotJson from "../fixtures/snapshot.json";
 import { classify } from "./classify.js";
 import { decide, newTab, type Snapshot, type TabRecord } from "./decide.js";
@@ -70,6 +70,13 @@ async function showState(tabId: number): Promise<void> {
   }
 }
 
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+/** A 0-byte response where the manifest expects content: still blocked, but logged distinctly. */
+function emptyBodyExpected(body: Uint8Array, blocked: Blocked | undefined): boolean {
+  return body.byteLength === 0 && blocked?.expected !== undefined && blocked.expected !== EMPTY_SHA256;
+}
+
 function keepBlockedBody(tab: Tab, details: browser.webRequest._OnBeforeRequestDetails, body: Uint8Array): void {
   if (!SCRIPT_TYPES.has(details.type)) return;
   const text = new TextDecoder().decode(body.subarray(0, BLOCKED_BODY_LIMIT));
@@ -97,7 +104,8 @@ function filterBody(details: browser.webRequest._OnBeforeRequestDetails, tabOrig
         filter.write(body);
         filter.close();
       } else {
-        console.warn("unforged: blocked", decision.blocked);
+        const label = emptyBodyExpected(body, decision.blocked) ? "unforged: blocked, empty body" : "unforged: blocked";
+        console.warn(label, decision.blocked);
         closeEmpty(filter);
         keepBlockedBody(tab, details, body);
         if (details.type === "main_frame") await blockDocument(details.tabId);
