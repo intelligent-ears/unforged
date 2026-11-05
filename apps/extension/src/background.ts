@@ -1,22 +1,34 @@
-// Background event page: observes code requests on policy tabs and buffers their bodies.
-// This milestone only hashes and logs; checking against a release comes later.
-import { sha256Hex } from "@unforged/core";
+// Background event page: buffers code responses on policy tabs, decides with decide.ts and
+// applies the result (extension.md "Background: enforcement"). Also answers the UI's messages.
+import type { TabState, Verdict } from "@unforged/core";
+import snapshotJson from "../fixtures/snapshot.json";
 import { classify } from "./classify.js";
-import { POLICY_ORIGINS } from "./config.js";
+import { decide, newTab, type Snapshot, type TabRecord } from "./decide.js";
+import { snapshotSummary } from "./summary.js";
 
-interface CheckedFile {
-  url: string;
-  type: string;
-  sha256: string;
-  bytes: number;
-}
+// Bundled fixture until M9 replaces it with the snapshot synced from Arkiv.
+const snapshot = snapshotJson as unknown as Snapshot;
+const policyOrigins = Object.values(snapshot.dapps).flatMap((d) => d.policy.origins);
 
-interface TabState {
+const BLOCKED_BODY_LIMIT = 200 * 1024;
+const SCRIPT_TYPES = new Set(["script", "worker", "xmlhttprequest"]);
+
+interface Tab {
   origin: string | undefined;
-  checked: CheckedFile[];
+  record: TabRecord;
+  blockedBodies: Map<string, string>; // url -> first 200 KB of a blocked script, memory only
 }
 
-const tabs = new Map<number, TabState>();
+const tabs = new Map<number, Tab>();
+
+function tabFor(tabId: number): Tab {
+  let tab = tabs.get(tabId);
+  if (!tab) {
+    tab = { origin: undefined, record: newTab(), blockedBodies: new Map() };
+    tabs.set(tabId, tab);
+  }
+  return tab;
+}
 
 function concat(chunks: Uint8Array[]): Uint8Array {
   const total = chunks.reduce((n, c) => n + c.byteLength, 0);
@@ -30,8 +42,7 @@ function concat(chunks: Uint8Array[]): Uint8Array {
 }
 
 /** Close without writing: the browser receives an empty body (fail closed). */
-function closeEmpty(filter: browser.webRequest.StreamFilter, url: string, error: unknown): void {
-  console.error("unforged: blocked, filter failed", { url, error });
+function closeEmpty(filter: browser.webRequest.StreamFilter): void {
   try {
     filter.close();
   } catch {
@@ -39,7 +50,37 @@ function closeEmpty(filter: browser.webRequest.StreamFilter, url: string, error:
   }
 }
 
-function filterBody(details: browser.webRequest._OnBeforeRequestDetails): void {
+const BADGES: Record<Verdict["level"], { text: string; color: string }> = {
+  reproduced: { text: "OK", color: "#2e7d32" },
+  vendor: { text: "OK", color: "#f9a825" },
+  mismatch: { text: "!", color: "#c62828" },
+  unsupported: { text: "", color: "#9e9e9e" },
+};
+
+async function showState(tabId: number): Promise<void> {
+  const state = tabs.get(tabId)?.record.state;
+  if (!state) return;
+  const badge = BADGES[state.verdict.level];
+  try {
+    await browser.action.setBadgeText({ tabId, text: badge.text });
+    await browser.action.setBadgeBackgroundColor({ tabId, color: badge.color });
+    await browser.storage.session.set({ [`tab:${tabId}`]: state });
+  } catch (error) {
+    console.error("unforged: could not publish tab state", { tabId, error });
+  }
+}
+
+function keepBlockedBody(tab: Tab, details: browser.webRequest._OnBeforeRequestDetails, body: Uint8Array): void {
+  if (!SCRIPT_TYPES.has(details.type)) return;
+  const text = new TextDecoder().decode(body.subarray(0, BLOCKED_BODY_LIMIT));
+  tab.blockedBodies.set(details.url, text);
+}
+
+async function blockDocument(tabId: number): Promise<void> {
+  await browser.tabs.update(tabId, { url: `${browser.runtime.getURL("blocked.html")}?tab=${tabId}` });
+}
+
+function filterBody(details: browser.webRequest._OnBeforeRequestDetails, tabOrigin: string): void {
   const filter = browser.webRequest.filterResponseData(details.requestId);
   const chunks: Uint8Array[] = [];
 
@@ -48,17 +89,24 @@ function filterBody(details: browser.webRequest._OnBeforeRequestDetails): void {
   };
 
   filter.onstop = async () => {
+    const tab = tabFor(details.tabId);
     try {
       const body = concat(chunks);
-      const sha256 = await sha256Hex(body);
-      const file = { url: details.url, type: details.type, sha256, bytes: body.byteLength };
-      console.log(file);
-      tabs.get(details.tabId)?.checked.push(file);
-      filter.write(body);
-      filter.close();
+      const decision = await decide(snapshot, tab.record, { url: details.url, type: details.type, tabOrigin, body });
+      if (decision.allow) {
+        filter.write(body);
+        filter.close();
+      } else {
+        console.warn("unforged: blocked", decision.blocked);
+        closeEmpty(filter);
+        keepBlockedBody(tab, details, body);
+        if (details.type === "main_frame") await blockDocument(details.tabId);
+      }
     } catch (error) {
-      closeEmpty(filter, details.url, error);
+      console.error("unforged: blocked, enforcement failed", { url: details.url, error });
+      closeEmpty(filter);
     }
+    await showState(details.tabId);
   };
 
   filter.onerror = () => {
@@ -69,13 +117,16 @@ function filterBody(details: browser.webRequest._OnBeforeRequestDetails): void {
 function onBeforeRequest(
   details: browser.webRequest._OnBeforeRequestDetails,
 ): browser.webRequest.BlockingResponse {
-  const { tabOrigin, filter } = classify(details, tabs.get(details.tabId)?.origin, POLICY_ORIGINS);
-  if (details.type === "main_frame" && details.tabId >= 0) {
-    tabs.set(details.tabId, { origin: tabOrigin, checked: [] });
+  if (details.tabId < 0 || details.url.startsWith(browser.runtime.getURL(""))) return {};
+  const { tabOrigin, filter } = classify(details, tabs.get(details.tabId)?.origin, policyOrigins);
+  if (details.type === "main_frame") {
+    // Top-level navigation resets the tab; decide() fills in the dapp once the document is checked.
+    tabs.set(details.tabId, { origin: tabOrigin, record: newTab(), blockedBodies: new Map() });
+    void showState(details.tabId);
   }
-  if (!filter) return {};
+  if (!filter || !tabOrigin) return {};
   try {
-    filterBody(details);
+    filterBody(details, tabOrigin);
     return {};
   } catch (error) {
     // Couldn't attach a filter, so the body can't be checked: cancel instead of allowing.
@@ -84,5 +135,47 @@ function onBeforeRequest(
   }
 }
 
+// ---- Messages (extension.md "Messages the background answers") ----
+
+type Message =
+  | { type: "getTabState"; tabId: number }
+  | { type: "getSnapshotSummary" }
+  | { type: "getBlockedBody"; tabId: number; url: string };
+
+async function getTabState(tabId: number): Promise<TabState> {
+  const inMemory = tabs.get(tabId)?.record.state;
+  if (inMemory) return inMemory;
+  const key = `tab:${tabId}`;
+  const stored = (await browser.storage.session.get(key))[key] as TabState | undefined;
+  return stored ?? newTab().state;
+}
+
+function getBlockedBody(tabId: number, url: string): { body: string } | { error: string } {
+  const body = tabs.get(tabId)?.blockedBodies.get(url);
+  return body === undefined ? { error: "no blocked body kept for this file" } : { body };
+}
+
+function onMessage(message: Message, sender: browser.runtime.MessageSender): Promise<unknown> | undefined {
+  if (sender.id !== browser.runtime.id) return undefined;
+  switch (message?.type) {
+    case "getTabState":
+      return getTabState(message.tabId);
+    case "getSnapshotSummary":
+      return Promise.resolve(snapshotSummary(snapshot));
+    case "getBlockedBody":
+      return Promise.resolve(getBlockedBody(message.tabId, message.url));
+    default:
+      return undefined;
+  }
+}
+
 browser.webRequest.onBeforeRequest.addListener(onBeforeRequest, { urls: ["<all_urls>"] }, ["blocking"]);
-browser.tabs.onRemoved.addListener((tabId) => tabs.delete(tabId));
+browser.runtime.onMessage.addListener(onMessage);
+// Firefox may reset per-tab badges when a page commits; repaint from our state.
+browser.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.status) void showState(tabId);
+});
+browser.tabs.onRemoved.addListener((tabId) => {
+  tabs.delete(tabId);
+  void browser.storage.session.remove(`tab:${tabId}`);
+});
