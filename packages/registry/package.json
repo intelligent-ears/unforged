@@ -7,10 +7,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./swarm": {
-      "types": "./dist/swarm.d.ts",
-      "default": "./dist/swarm.js"
     }
   },
   "scripts": {
