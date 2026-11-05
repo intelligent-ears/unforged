@@ -29,9 +29,10 @@ createWriteClient(account, accessKey)
 rabdiPrepare(account, accessKey): Prepare // explicit nonce, gas and gasPrice for each write
 publishAttestation(walletClient, payload: { attestation, manifest }, attrs, prepare?): Promise<{ entityKey, txHash }>
 publishPolicy(walletClient, policy, version, prepare?): Promise<{ entityKey, txHash }>
-findAttestationKey(publicClient, creator, manifestRoot): Promise<entityKey | null> // publish's idempotency check
-fetchPolicies(publicClient, curator): Promise<{ version: number; policy: Policy }[]> // highest version first
-fetchAttestations(publicClient, builder, dapp, skipKeys?: Set<string>): Promise<{ entityKey, creator, attestation, manifest, swarmRef }[]>
+// Reads take `source`: a client, or { accessKey? }. No key or "" means the public RPC. All retry HTTP 429 (see below).
+findAttestationKey(source, creator, manifestRoot): Promise<entityKey | null> // publish's idempotency check
+fetchPolicies(source, curator): Promise<{ version: number; policy: Policy }[]> // highest version first
+fetchAttestations(source, builder, dapp, skipKeys?: Set<string>): Promise<{ entityKey, creator, attestation, manifest, swarmRef }[]>
   // lists keys + attributes first, then fetches payloads only for keys not in skipKeys (incremental sync)
 gatewayUrl(gateway, ref, path): string
 // Swarm (@ethersphere/bee-js), Node only
@@ -39,8 +40,8 @@ uploadDir(beeUrl, batchId, dir): Promise<string /* swarm ref */>
 ```
 Gzip with `fflate` (works in both Node and the browser).
 SDK facts that save research time:
-- Clients: `rabdi({ accessKey })` from `@arkiv-network/sdk/chains` and `http()` from viem. The key is a path segment of the RPC URL, and viem quotes that URL in errors, so never log a raw transport error. The CLI reads the key from `ARKIV_API_KEY` and `apps/cli/src/registry.ts` strips URLs and the key from anything it prints. An access key neither signs nor pays gas.
-- Keyless reads: `rabdi({ accessKey: "" })` uses the public endpoint, which is "heavily rate limited" and can answer HTTP 429. Arkiv publishes no number for it. The extension always reads this way and must treat a 429 as a failed sync, never as an empty result. With a key: 100,000,000 quota units per key; each `arkiv_query` costs 10, other calls (including `arkiv_getEntity`) cost zero under current provider policy.
+- Clients: `rabdi({ accessKey })` from `@arkiv-network/sdk/chains` and `http()` from viem. The key is a path segment of the RPC URL, and viem quotes that URL in errors, so never log a raw transport error. The CLI reads the key from `ARKIV_ACCESS_KEY` and `apps/cli/src/registry.ts` strips URLs and the key from anything it prints. An access key neither signs nor pays gas.
+- Keyless reads: `rabdi({ accessKey: "" })` uses the public endpoint, which is "heavily rate limited" and can answer HTTP 429. Arkiv publishes no number for it. The extension always reads this way. Each read request retries a 429 with exponential backoff (0.5s, 1s, 2s, 4s, 8s, or the server's `Retry-After`, capped at 60s), then throws, and the extension must treat that as a failed sync, never as an empty result. With a key: 100,000,000 quota units per key; each `arkiv_query` costs 10, other calls (including `arkiv_getEntity`) cost zero under current provider policy.
 - Write: `walletClient.createEntity(schema, values, { expiration: ExpirationTime.max(), flags: { readonly: true, permissionlessExtension: false } }, txParams)`. It returns `{ entityKey, txHash, expiresAt }` and throws if the receipt reverted. `fromDays(365)` is rejected: the maximum lifetime is about 182 days. Longer retention needs `extendEntity` before expiry, which the owner can still do on a readonly entity.
 - Transaction parameters: `rabdiPrepare` estimates the exact write through a wallet that can't sign or send, then uses `gas = max(1,000,000, 2 x estimate)`, the latest nonce and the current gas price, refusing if a transaction is pending, the gas is over half the block limit, or the balance can't cover it. Arkiv measured default estimation reverting from gas exhaustion on Rabdi. Writes are not retried; after a failure, check the explorer first.
 - Read: `publicClient.select({ $key: true, $creationFlags: true, swarm_ref: true }).where([eq("project","unforged"), eq("entity_type","attestation"), eq("dapp", d)]).createdBy(addr).orderBy(asc("$key")).limit(100).fetch()`. Rows are flat and each value is `{ type, value }`. Bytes values are hex. `arkiv_getEntity` (`client.getEntity(key)`) returns everything under `$attributes`.
