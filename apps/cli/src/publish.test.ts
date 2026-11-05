@@ -18,6 +18,7 @@ const manifest: Manifest = {
   config: {},
 };
 const recipe = { repo: "https://example.com/repo", commit: manifest.commit, dapp: "demo" } as unknown as Recipe;
+const TX_PARAMS = { nonce: 3, gas: 1_000_000n, gasPrice: 1n };
 const toolchain = { node: "24.0.0", packageManager: "yarn@4", os: "linux-x64" };
 
 async function signedBy(signer = account, m = manifest) {
@@ -31,11 +32,12 @@ function clients(existingKeys: string[] = []) {
     where: () => query,
     createdBy: vi.fn(() => query),
     limit: () => query,
-    fetch: vi.fn(async () => ({ entities: existingKeys.map((k) => ({ key: k })), hasNextPage: () => false })),
+    fetch: vi.fn(async () => ({ entities: existingKeys.map((k) => ({ $key: k })), blockNumber: 1n, skipped: 0 })),
   };
-  const createEntity = vi.fn(async (_: unknown) => ({ entityKey: "0xnew", txHash: "0xtx", expiresAt: 1n }));
-  const value = { read: { select: () => query, getEntity: vi.fn() }, write: { createEntity } };
-  return { value: value as unknown as PublishClients, createEntity, query };
+  const createEntity = vi.fn(async (..._: unknown[]) => ({ entityKey: "0xnew", txHash: "0xtx", expiresAt: 1n }));
+  const prepare = vi.fn(async () => TX_PARAMS);
+  const value = { read: { select: () => query, getEntity: vi.fn() }, write: { createEntity }, prepare };
+  return { value: value as unknown as PublishClients, createEntity, query, prepare };
 }
 
 let attestationPath: string;
@@ -58,11 +60,12 @@ describe("runPublish", () => {
 
     expect(result).toEqual({ created: true, entityKey: "0xnew", txHash: "0xtx", creator: account.address });
     expect(query.createdBy).toHaveBeenCalledWith(account.address);
-    const params = createEntity.mock.calls[0]?.[0] as { attributes: Record<string, unknown> };
+    const { payload: _, ...attributes } = createEntity.mock.calls[0]?.[1] as Record<string, unknown>;
     const { statement } = await signedBy();
-    expect(params.attributes).toEqual({
+    expect(attributes).toEqual({
       project: "unforged",
       entity_type: "attestation",
+      content_type: "application/gzip",
       dapp: "demo",
       release: "1.0.0",
       commit: manifest.commit,
@@ -70,6 +73,17 @@ describe("runPublish", () => {
       recipe_digest: statement.predicate.recipeDigest,
       swarm_ref: "none",
     });
+  });
+
+  it("sends the explicit transaction parameters from prepare", async () => {
+    const { value, createEntity, prepare } = clients();
+    await runPublish(attestationPath, manifestPath, { env, clients: value });
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(createEntity.mock.calls[0]?.[3]).toEqual(TX_PARAMS);
+  });
+
+  it("needs an access key to reach the registry", async () => {
+    await expect(runPublish(attestationPath, manifestPath, { env })).rejects.toThrow(/ARKIV_API_KEY is not set/);
   });
 
   it("is idempotent: an existing root for this creator publishes nothing", async () => {

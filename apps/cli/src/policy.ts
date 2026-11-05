@@ -5,7 +5,7 @@ import { z } from "zod";
 import { CliError, EXIT_BAD_INPUT } from "./errors.js";
 import { readJson } from "./files.js";
 import { accountFromEnv } from "./keys.js";
-import { type Clients, registryCall, tiramisuClients } from "./registry.js";
+import { type Clients, rabdiClients, registryCall, registryWrite } from "./registry.js";
 
 const address = z
   .string()
@@ -42,15 +42,16 @@ export interface PolicyResult {
 
 /** Publishes a policy as the next version for its dapp. Curator key only. */
 export async function runPolicy(policyPath: string, options: PolicyOptions = {}): Promise<PolicyResult> {
-  const account = accountFromEnv("CURATOR_PRIVATE_KEY", options.env ?? process.env);
+  const { env = process.env } = options;
+  const account = accountFromEnv("CURATOR_PRIVATE_KEY", env);
   const policy = parsePolicy(readJson(policyPath), policyPath);
-  const { read, write } = options.clients ?? tiramisuClients(account);
+  const { read, write, prepare } = options.clients ?? rabdiClients(account, env);
 
-  const published = await registryCall(() => fetchPolicies(read, account.address));
+  const published = await registryCall(() => fetchPolicies(read, account.address), env);
   const versions = published.filter((p) => p.policy.dapp === policy.dapp).map((p) => p.version);
   const version = Math.max(0, ...versions) + 1;
 
-  const { entityKey, txHash } = await registryCall(() => publishPolicy(write, policy, version));
+  const { entityKey, txHash } = await registryWrite(() => publishPolicy(write, policy, version, prepare), env);
   return { entityKey, txHash, version, curator: account.address };
 }
 

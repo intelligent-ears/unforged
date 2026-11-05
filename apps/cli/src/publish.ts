@@ -3,7 +3,7 @@ import { findAttestationKey, publishAttestation } from "@unforged/registry";
 import { CliError, EXIT_BAD_INPUT } from "./errors.js";
 import { readJson, readManifest } from "./files.js";
 import { accountFromEnv } from "./keys.js";
-import { type Clients, registryCall, tiramisuClients } from "./registry.js";
+import { type Clients, rabdiClients, registryCall, registryWrite } from "./registry.js";
 
 const NO_SWARM_REF = "none"; // until uploads exist (M8)
 
@@ -20,27 +20,27 @@ export type PublishResult =
 
 /** Creates the attestation entity, unless this creator already has one for the manifest root. */
 export async function runPublish(attestationPath: string, manifestPath: string, options: PublishOptions = {}): Promise<PublishResult> {
-  const account = accountFromEnv("BUILDER_PRIVATE_KEY", options.env ?? process.env);
+  const { env = process.env } = options;
+  const account = accountFromEnv("BUILDER_PRIVATE_KEY", env);
   const attestation = readJson(attestationPath) as SignedAttestation;
   const manifest = readManifest(manifestPath);
   await assertAcceptable(attestation, manifest, account.address);
 
-  const { read, write } = options.clients ?? tiramisuClients(account);
+  const { read, write, prepare } = options.clients ?? rabdiClients(account, env);
   const root = await manifestRoot(manifest);
 
-  const existing = await registryCall(() => findAttestationKey(read, account.address, root));
+  const existing = await registryCall(() => findAttestationKey(read, account.address, root), env);
   if (existing !== null) return { created: false, entityKey: existing, creator: account.address };
 
-  const { entityKey, txHash } = await registryCall(() =>
-    publishAttestation(write, { attestation, manifest }, {
-      dapp: manifest.dapp,
-      release: manifest.release,
-      commit: manifest.commit,
-      manifest_root: root,
-      recipe_digest: attestation.statement.predicate.recipeDigest,
-      swarm_ref: NO_SWARM_REF,
-    }),
-  );
+  const attrs = {
+    dapp: manifest.dapp,
+    release: manifest.release,
+    commit: manifest.commit,
+    manifest_root: root,
+    recipe_digest: attestation.statement.predicate.recipeDigest,
+    swarm_ref: NO_SWARM_REF,
+  };
+  const { entityKey, txHash } = await registryWrite(() => publishAttestation(write, { attestation, manifest }, attrs, prepare), env);
   return { created: true, entityKey, txHash, creator: account.address };
 }
 

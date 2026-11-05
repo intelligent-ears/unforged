@@ -20,3 +20,10 @@ export function accountFromEnv(name: KeyName, env: NodeJS.ProcessEnv = process.e
     throw invalid;
   }
 }
+
+/** The Rabdi RPC access key. Only the CLI uses one; the extension reads keyless. */
+export function accessKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string {
+  const value = env.ARKIV_API_KEY?.trim();
+  if (!value) throw new CliError(EXIT_BAD_INPUT, "ARKIV_API_KEY is not set");
+  return value;
+}

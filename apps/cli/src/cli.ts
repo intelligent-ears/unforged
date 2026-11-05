@@ -8,8 +8,8 @@ import { runPolicy } from "./policy.js";
 import { runPublish } from "./publish.js";
 import { explorerAddressUrl, explorerTxUrl } from "./registry.js";
 
-// Signing keys come from the environment or a git-ignored .env in the working directory.
-// `unforged build` passes install and build scripts an allowlisted env, so they never see them.
+// Signing keys and the Rabdi access key come from the environment or a git-ignored .env in the
+// working directory. `unforged build` passes install and build scripts an allowlisted env, so they never see them.
 config({ quiet: true });
 
 const program = new Command("unforged").description("Rebuild dapps from source and attest the result");
