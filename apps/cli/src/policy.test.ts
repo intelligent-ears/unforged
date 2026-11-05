@@ -100,7 +100,18 @@ describe("runPolicy", () => {
     expect(decodePayload<{ builders: string[] }>(values.payload).builders).toEqual(builders);
   });
 
+  it("publishes configPins as given", async () => {
+    const configPins = { "/runtime/window-env.js": "1dc276f81fab369bcab6cd53b511e4090897b27501adae5b5b5cd9fd46489537" };
+    write({ ...policy, configPins });
+    const { value, createEntity } = clients();
+    await runPolicy(path, { env, clients: value });
+    const values = createEntity.mock.calls[0]?.[1] as { payload: Uint8Array };
+    expect(decodePayload<{ configPins: unknown }>(values.payload).configPins).toEqual(configPins);
+  });
+
   it.each([
+    ["a config pin that is not 64 lowercase hex", { configPins: { "/runtime/window-env.js": "ABC" } }],
+    ["a config pin path without a leading slash", { configPins: { "runtime/window-env.js": "0".repeat(64) } }],
     ["an invalid builder address", { builders: ["0x1234", builders[1]] }],
     ["a threshold above the distinct builder count", { builders: [builders[0], builders[0]] }],
     ["a zero threshold", { threshold: 0 }],

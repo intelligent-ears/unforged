@@ -12,6 +12,8 @@ const address = z
   .refine((value) => isAddress(value, { strict: false }), "must be an address")
   .transform((value) => getAddress(value));
 
+const sha256 = z.string().regex(/^[0-9a-f]{64}$/, "must be 64 lowercase hex");
+
 const policySchema = z
   .strictObject({
     dapp: z.string().regex(/^[a-z0-9-]+$/),
@@ -20,8 +22,9 @@ const policySchema = z
     builders: z.array(address).min(1),
     threshold: z.int().min(1),
     acceptLatest: z.int().min(1),
-    thirdParty: z.record(z.string(), z.record(z.string(), z.string().regex(/^[0-9a-f]{64}$/))),
+    thirdParty: z.record(z.string(), z.record(z.string(), sha256)),
     recovery: z.strictObject({ gateway: z.string().min(1) }),
+    configPins: z.record(z.string().regex(/^\//, "must be a served path starting with /"), sha256).optional(),
   })
   .refine((policy) => policy.threshold <= new Set(policy.builders).size, {
     path: ["threshold"],
