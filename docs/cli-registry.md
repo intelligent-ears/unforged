@@ -4,8 +4,8 @@
 
 | Command | Does |
 |---|---|
-| `unforged build <recipe.yaml>` | Clone `repo` at `commit` (shallow) into `recipe.buildPath`, write `files`, write `env` to `envFile`, run `install` then `build` using the pinned Node, then hash `output` into a Manifest (config files go to `manifest.config`, not `files`). Writes `manifest.json` and prints `manifestRoot` |
-| `unforged attest <manifest.json> <recipe.yaml>` | Build the Statement, sign the digest with `BUILDER_PRIVATE_KEY` (env var, never logged), write `attestation.json` |
+| `unforged build <recipe.yaml>` | Clone `repo` at `commit` (shallow) into `recipe.buildPath`, write `files`, write `env` to `envFile`, run `install` then `build` using the pinned Node, then hash `output` into a Manifest (config files go to `manifest.config`, not `files`). Writes `manifest.json` and `build-info.json` (`{ manifestRoot, node, packageManager, os, builtAt }`, from the first build with `--check`) and prints `manifestRoot` |
+| `unforged attest <manifest.json> <recipe.yaml> [--toolchain-from-host]` | Build the Statement, sign the digest with `BUILDER_PRIVATE_KEY` (env var, never logged), write `attestation.json`. `toolchain.node`, `toolchain.os` and `builtAt` come from the `build-info.json` beside the manifest. Refuses if it describes another manifest, or if it is missing unless `--toolchain-from-host` records the current machine and time instead |
 | `unforged publish <attestation.json> <manifest.json> [--out-dir <dir>]` | Optionally upload `out-dir` to Swarm (gets `swarm_ref`), then create the Arkiv `attestation` entity. Idempotent: if an entity with the same `manifest_root` already exists for this creator, print it and exit 0 |
 | `unforged policy <policy.json>` | Curator only. Create a `policy` entity with `version = previous + 1` |
 | `unforged verify <url>` | Debug helper: fetch a live site's files listed in the accepted manifest and report matches. Not used by the extension |

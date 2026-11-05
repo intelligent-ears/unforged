@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Manifest, manifestRoot, recipeDigest, type SignedAttestation, verifyAttestation } from "@unforged/core";
@@ -41,31 +41,100 @@ let dir: string;
 let manifestPath: string;
 let recipePath: string;
 
-beforeEach(() => {
+const BUILT_AT = "2026-11-05T17:26:52.000Z";
+
+async function buildInfo() {
+  return { manifestRoot: await manifestRoot(manifest), node: "v24.22.2", packageManager: "yarn@4.17.1", os: "linux-x64", builtAt: BUILT_AT };
+}
+
+beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "unforged-attest-"));
   manifestPath = join(dir, "manifest.json");
   recipePath = join(dir, "recipe.yaml");
   writeFileSync(manifestPath, JSON.stringify(manifest));
   writeFileSync(recipePath, stringify(recipe));
+  writeFileSync(join(dir, "build-info.json"), JSON.stringify(await buildInfo()));
 });
 
-const attest = (env: NodeJS.ProcessEnv = { BUILDER_PRIVATE_KEY: key }) => runAttest(manifestPath, recipePath, { outDir: dir, env });
+const attest = (env: NodeJS.ProcessEnv = { BUILDER_PRIVATE_KEY: key }, options: { toolchainFromHost?: boolean } = {}) =>
+  runAttest(manifestPath, recipePath, { outDir: dir, env, ...options });
+const written = () => JSON.parse(readFileSync(join(dir, "attestation.json"), "utf8")) as SignedAttestation;
 
 describe("runAttest", () => {
   it("writes an attestation that verifies with core", async () => {
     await attest();
-    const written = JSON.parse(readFileSync(join(dir, "attestation.json"), "utf8")) as SignedAttestation;
+    const attestation = written();
 
-    await expect(verifyAttestation(written, address)).resolves.toBe(true);
-    expect(written.statement.subject).toEqual([{ name: "demo@1.0.0", digest: { sha256: await manifestRoot(manifest) } }]);
-    expect(written.statement.predicate).toMatchObject({
+    await expect(verifyAttestation(attestation, address)).resolves.toBe(true);
+    expect(attestation.statement.subject).toEqual([{ name: "demo@1.0.0", digest: { sha256: await manifestRoot(manifest) } }]);
+    expect(attestation.statement.predicate).toMatchObject({
       repo: recipe.repo,
       commit: recipe.commit,
       builder: address,
       recipeDigest: await recipeDigest(parseRecipe(stringify(recipe))),
     });
-    expect(written.statement.predicate.toolchain.packageManager).toBe("yarn@4.17.1");
-    expect(written.statement.predicate.toolchain.node).toBe(process.versions.node);
+    expect(attestation.statement.predicate.toolchain.packageManager).toBe("yarn@4.17.1");
+  });
+
+  it("describes the build from build-info.json, not the signing", async () => {
+    await attest();
+    const { predicate } = written().statement;
+    expect(predicate.toolchain).toEqual({ node: "v24.22.2", packageManager: "yarn@4.17.1", os: "linux-x64" });
+    expect(predicate.builtAt).toBe(BUILT_AT);
+  });
+
+  it("reads build-info.json from the manifest's directory, not the output directory", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "unforged-attest-out-"));
+    await runAttest(manifestPath, recipePath, { outDir, env: { BUILDER_PRIVATE_KEY: key } });
+    const out = JSON.parse(readFileSync(join(outDir, "attestation.json"), "utf8")) as SignedAttestation;
+    expect(out.statement.predicate.builtAt).toBe(BUILT_AT);
+  });
+
+  it("refuses when build-info.json describes another manifest, writing nothing", async () => {
+    writeFileSync(join(dir, "build-info.json"), JSON.stringify({ ...(await buildInfo()), manifestRoot: "f".repeat(64) }));
+    await expect(attest()).rejects.toMatchObject({ exitCode: 1, message: expect.stringMatching(/build-info\.json.*another manifest/) });
+    expect(existsSync(join(dir, "attestation.json"))).toBe(false);
+  });
+
+  it("refuses that mismatch even with --toolchain-from-host", async () => {
+    writeFileSync(join(dir, "build-info.json"), JSON.stringify({ ...(await buildInfo()), manifestRoot: "f".repeat(64) }));
+    await expect(attest(undefined, { toolchainFromHost: true })).rejects.toThrow(/another manifest/);
+  });
+
+  it("refuses a missing build-info.json, naming the flag", async () => {
+    rmSync(join(dir, "build-info.json"));
+    await expect(attest()).rejects.toMatchObject({ exitCode: 1, message: expect.stringMatching(/--toolchain-from-host/) });
+    expect(existsSync(join(dir, "attestation.json"))).toBe(false);
+  });
+
+  it("uses the current process when build-info.json is missing and --toolchain-from-host is given", async () => {
+    rmSync(join(dir, "build-info.json"));
+    const before = Date.now();
+    await attest(undefined, { toolchainFromHost: true });
+    const { statement } = written();
+    expect(statement.predicate.toolchain).toEqual({
+      node: process.versions.node,
+      packageManager: "yarn@4.17.1",
+      os: `${process.platform}-${process.arch}`,
+    });
+    expect(Date.parse(statement.predicate.builtAt)).toBeGreaterThanOrEqual(before);
+    await expect(verifyAttestation(written(), address)).resolves.toBe(true);
+  });
+
+  it("prefers build-info.json when it exists, even with --toolchain-from-host", async () => {
+    await attest(undefined, { toolchainFromHost: true });
+    expect(written().statement.predicate.builtAt).toBe(BUILT_AT);
+  });
+
+  it.each([
+    ["isn't JSON", "not json"],
+    ["lacks fields", "{}"],
+    ["has an unparseable time", null],
+  ])("refuses a build-info.json that %s", async (_, content) => {
+    const bad = content ?? JSON.stringify({ ...(await buildInfo()), builtAt: "yesterday" });
+    writeFileSync(join(dir, "build-info.json"), bad);
+    await expect(attest()).rejects.toMatchObject({ exitCode: 1 });
+    expect(existsSync(join(dir, "attestation.json"))).toBe(false);
   });
 
   it("returns the root and builder for the summary", async () => {

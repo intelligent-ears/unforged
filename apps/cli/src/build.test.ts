@@ -178,6 +178,44 @@ describe("runBuild", () => {
     });
   });
 
+  it("writes build-info.json describing the build, next to the manifest", async () => {
+    const before = Date.now();
+    const root_ = await runBuild(writeRecipe(), { outDir });
+    const info = JSON.parse(readFileSync(join(outDir, "build-info.json"), "utf8"));
+
+    expect(info).toEqual({
+      manifestRoot: root_,
+      node: process.version,
+      packageManager: "yarn@9.9.9",
+      os: `${process.platform}-${process.arch}`,
+      builtAt: expect.any(String),
+    });
+    expect(new Date(info.builtAt).toISOString()).toBe(info.builtAt);
+    expect(Date.parse(info.builtAt)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(info.builtAt)).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("--check records the first build's time", async () => {
+    const stamps = vi
+      .spyOn(Date.prototype, "toISOString")
+      .mockReturnValueOnce("2026-01-01T00:00:00.000Z")
+      .mockReturnValueOnce("2026-01-02T00:00:00.000Z");
+    await runBuild(writeRecipe(), { outDir, check: true });
+    stamps.mockRestore();
+    expect(JSON.parse(readFileSync(join(outDir, "build-info.json"), "utf8")).builtAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("removes an older build-info.json when the build fails", async () => {
+    writeFileSync(join(outDir, "build-info.json"), "{}");
+    await expect(runBuild(writeRecipe({ build: "exit 7" }), { outDir })).rejects.toThrow(CliError);
+    expect(existsSync(join(outDir, "build-info.json"))).toBe(false);
+  });
+
+  it("--check writes no build-info.json when the builds differ", async () => {
+    await expect(runBuild(writeRecipe({ env: { A: "1", NONDET: "1" } }), { outDir, check: true })).rejects.toThrow(CliError);
+    expect(existsSync(join(outDir, "build-info.json"))).toBe(false);
+  });
+
   it("--check passes on a deterministic build", async () => {
     const plain = await runBuild(writeRecipe(), { outDir });
     rmSync(buildPath, { recursive: true });

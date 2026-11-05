@@ -51,8 +51,8 @@ interface Statement {
   predicate: {
     repo: string; commit: string; recipeDigest: string;
     builder: `0x${string}`;          // checksummed address
-    builtAt: string;                 // ISO 8601
-    toolchain: { node: string; packageManager: string; os: string };
+    builtAt: string;                 // ISO 8601, when the build finished hashing, not when it was signed
+    toolchain: { node: string; packageManager: string; os: string }; // of the build, not the signing
   };
 }
 interface SignedAttestation {

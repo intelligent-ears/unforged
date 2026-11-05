@@ -16,7 +16,7 @@ const program = new Command("unforged").description("Rebuild dapps from source a
 
 program
   .command("build")
-  .description("Build a recipe and write manifest.json and build.log to the current directory")
+  .description("Build a recipe and write manifest.json, build-info.json and build.log to the current directory")
   .argument("<recipe>", "path to the recipe YAML")
   .option("--check", "build twice from a clean checkout and exit 3 if the manifests differ")
   .option("--allow-node-mismatch", "build even if node --version doesn't match recipe.node")
@@ -29,8 +29,9 @@ program
   .description("Sign a statement for a manifest with BUILDER_PRIVATE_KEY and write attestation.json")
   .argument("<manifest>", "path to manifest.json")
   .argument("<recipe>", "path to the recipe YAML the manifest was built from")
-  .action(async (manifest: string, recipe: string) => {
-    const result = await runAttest(manifest, recipe);
+  .option("--toolchain-from-host", "with no build-info.json beside the manifest, record this machine and time instead")
+  .action(async (manifest: string, recipe: string, options: { toolchainFromHost?: boolean }) => {
+    const result = await runAttest(manifest, recipe, options);
     console.log(`wrote ${result.path}`);
     console.log(`manifest root: ${result.manifestRoot}`);
     console.log(`builder:       ${result.builder}`);

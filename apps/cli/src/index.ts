@@ -1,5 +1,6 @@
 export * from "./attest.js";
 export * from "./build.js";
+export * from "./build-info.js";
 export * from "./errors.js";
 export * from "./keys.js";
 export * from "./manifest.js";

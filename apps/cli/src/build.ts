@@ -2,6 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { canonicalJSON, manifestRoot, type Manifest, type Recipe } from "@unforged/core";
+import { BUILD_INFO_FILE, describeBuild } from "./build-info.js";
 import { buildEnv, hostEnv } from "./env.js";
 import { CliError, EXIT_BUILD_FAILED, EXIT_NONDETERMINISM } from "./errors.js";
 import { diffFiles, hashOutput } from "./manifest.js";
@@ -12,7 +13,7 @@ const MAX_REPORTED_PATHS = 10;
 export interface BuildOptions {
   check?: boolean;
   allowNodeMismatch?: boolean;
-  /** Where manifest.json and build.log go. Never inside buildPath, which --check deletes. */
+  /** Where manifest.json, build-info.json and build.log go. Never inside buildPath, which --check deletes. */
   outDir?: string;
 }
 
@@ -22,7 +23,7 @@ interface StepOptions {
   log: number;
 }
 
-/** Builds the recipe and writes manifest.json. Returns the manifestRoot; throws CliError on failure. */
+/** Builds the recipe and writes manifest.json and build-info.json. Returns the manifestRoot; throws CliError on failure. */
 export async function runBuild(recipePath: string, options: BuildOptions = {}): Promise<string> {
   const { check = false, allowNodeMismatch = false, outDir = process.cwd() } = options;
   const recipe = parseRecipe(readFileSync(recipePath, "utf8"));
@@ -31,15 +32,19 @@ export async function runBuild(recipePath: string, options: BuildOptions = {}): 
 
   mkdirSync(outDir, { recursive: true });
   const manifestPath = join(outDir, "manifest.json");
-  rmSync(manifestPath, { force: true }); // a failed run must not leave an older manifest to attest
+  const buildInfoPath = join(outDir, BUILD_INFO_FILE);
+  // A failed run must not leave an older manifest to attest, or facts about an older build.
+  rmSync(manifestPath, { force: true });
+  rmSync(buildInfoPath, { force: true });
   const log = openSync(join(outDir, "build.log"), "w");
   try {
-    const manifest = await buildOnce(recipe, log);
+    const { manifest, builtAt } = await buildOnce(recipe, log);
     if (check) {
       rmSync(recipe.buildPath, { recursive: true }); // only reached after this run cloned into it
-      await assertSameBuild(manifest, await buildOnce(recipe, log));
+      await assertSameBuild(manifest, (await buildOnce(recipe, log)).manifest);
     }
     writeFileSync(manifestPath, canonicalJSON(manifest));
+    writeFileSync(buildInfoPath, canonicalJSON(await describeBuild(manifest, recipe, builtAt)));
     return await manifestRoot(manifest);
   } finally {
     closeSync(log);
@@ -77,7 +82,7 @@ async function assertSameBuild(first: Manifest, second: Manifest): Promise<void>
   );
 }
 
-async function buildOnce(recipe: Recipe, log: number): Promise<Manifest> {
+async function buildOnce(recipe: Recipe, log: number): Promise<{ manifest: Manifest; builtAt: string }> {
   const repoDir = recipe.buildPath;
   await clone(recipe, log);
   writeRecipeFiles(recipe);
@@ -85,7 +90,8 @@ async function buildOnce(recipe: Recipe, log: number): Promise<Manifest> {
   const step = { cwd: repoDir, env: buildEnv(recipe), log };
   await runShell("install", resolveYarn(recipe.install, recipe.packageManager, repoDir), step);
   await runShell("build", resolveYarn(recipe.build, recipe.packageManager, repoDir), step);
-  return hashOutput(recipe, join(repoDir, recipe.output));
+  const manifest = await hashOutput(recipe, join(repoDir, recipe.output));
+  return { manifest, builtAt: new Date().toISOString() };
 }
 
 /** Fetches only the pinned commit: `git clone --branch` can't take a hash. */
