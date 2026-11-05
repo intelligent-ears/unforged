@@ -13,7 +13,7 @@ function listServedPaths(dir: string, prefix = ""): string[] {
   });
 }
 
-export async function hashOutput(recipe: Recipe, outputDir: string): Promise<Manifest> {
+export async function hashOutput(recipe: Pick<Recipe, "dapp" | "release" | "commit" | "configFiles">, outputDir: string): Promise<Manifest> {
   const served = listServedPaths(outputDir);
   if (served.length === 0) throw new CliError(EXIT_BUILD_FAILED, `build output is empty: ${outputDir}`);
 

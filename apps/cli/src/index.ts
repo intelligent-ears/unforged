@@ -5,6 +5,7 @@ export * from "./errors.js";
 export * from "./keys.js";
 export * from "./manifest.js";
 export * from "./mirror-check.js";
+export * from "./mirror-source.js";
 export * from "./policy.js";
 export * from "./publish.js";
 export * from "./recipe.js";
