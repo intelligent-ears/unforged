@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "description": "Blocks dapp code that independent builders have not reproduced from source.",
   "background": {
-    "scripts": ["background.js"],
+    "scripts": [
+      "background.js"
+    ],
     "type": "module"
   },
   "action": {
@@ -15,5 +17,17 @@
       "id": "unforged@unforged.dev",
       "strict_min_version": "128.0"
     }
-  }
+  },
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "webRequestFilterResponse",
+    "storage",
+    "alarms",
+    "tabs",
+    "browsingData"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
 }

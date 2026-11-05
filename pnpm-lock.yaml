@@ -34,7 +34,14 @@ importers:
         version: 5.1.0(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(yaml@2.9.1))
 
   apps/extension:
+    dependencies:
+      '@unforged/core':
+        specifier: workspace:*
+        version: link:../../packages/core
     devDependencies:
+      '@types/firefox-webext-browser':
+        specifier: ^143.0.1
+        version: 143.0.1
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -219,6 +226,9 @@ packages:
 
   '@types/estree@1.0.10':
     resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==}
+
+  '@types/firefox-webext-browser@143.0.1':
+    resolution: {integrity: sha512-vDoqYr4fe1dqZXmgkzpxki47AhxfwvXD2juY2pADCKykIh10u8Yq2oe3lKZ88s33pxqj7SYULEq6kFW3c6UJzw==}
 
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
@@ -764,6 +774,8 @@ snapshots:
   '@types/deep-eql@4.0.2': {}
 
   '@types/estree@1.0.10': {}
+
+  '@types/firefox-webext-browser@143.0.1': {}
 
   '@types/node@26.6.6':
     dependencies:

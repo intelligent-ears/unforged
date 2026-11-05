@@ -8,9 +8,13 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@types/firefox-webext-browser": "^143.0.1",
     "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@unforged/core": "workspace:*"
   }
 }
