@@ -12,7 +12,7 @@ import {
   encodePayload,
   fetchAttestations,
   fetchPolicies,
-  findAttestationKey,
+  findAttestation,
   publishAttestation,
   publishPolicy,
   type ReadClient,
@@ -242,17 +242,22 @@ describe("fetchPolicies", () => {
   });
 });
 
-describe("findAttestationKey", () => {
+describe("findAttestation", () => {
   it("looks up by manifest root for this creator", async () => {
-    const { client, queries } = mockReadClient([[{ $key: "0xa" }]]);
-    await expect(findAttestationKey(client, BUILDER, "d".repeat(64))).resolves.toBe("0xa");
+    const { client, queries } = mockReadClient([[{ $key: "0xa", swarm_ref: { type: "str", value: "lido-0.161.0" } }]]);
+    await expect(findAttestation(client, BUILDER, "d".repeat(64))).resolves.toEqual({ entityKey: "0xa", swarmRef: "lido-0.161.0" });
     expect(queries[0]?.createdBy).toBe(BUILDER);
     expect(JSON.stringify(queries[0]?.where)).toContain("d".repeat(64));
   });
 
+  it("reads swarm_ref none as no mirror", async () => {
+    const { client } = mockReadClient([[{ $key: "0xa", swarm_ref: { type: "str", value: "none" } }]]);
+    await expect(findAttestation(client, BUILDER, "d".repeat(64))).resolves.toEqual({ entityKey: "0xa", swarmRef: null });
+  });
+
   it("returns null when there is none", async () => {
     const { client } = mockReadClient([[]]);
-    await expect(findAttestationKey(client, BUILDER, "d".repeat(64))).resolves.toBeNull();
+    await expect(findAttestation(client, BUILDER, "d".repeat(64))).resolves.toBeNull();
   });
 });
 

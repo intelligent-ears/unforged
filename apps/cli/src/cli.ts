@@ -3,7 +3,9 @@ import { Command } from "commander";
 import { config } from "dotenv";
 import { runAttest } from "./attest.js";
 import { runBuild } from "./build.js";
-import { CliError, EXIT_BUILD_FAILED } from "./errors.js";
+import { CliError, EXIT_BUILD_FAILED, EXIT_MIRROR_MISMATCH } from "./errors.js";
+import { readManifest } from "./files.js";
+import { checkMirror, formatMirrorReport, mirrorPassed } from "./mirror-check.js";
 import { runPolicy } from "./policy.js";
 import { runPublish } from "./publish.js";
 import { explorerAddressUrl, explorerTxUrl } from "./registry.js";
@@ -38,16 +40,33 @@ program
   });
 
 program
+  .command("mirror-check")
+  .description("Fetch a mirror's files and compare them with a manifest. Exits 3 unless all match")
+  .argument("<manifest>", "path to manifest.json")
+  .requiredOption("--gateway <url>", 'mirror base URL: https, ending in "/"')
+  .requiredOption("--ref <name>", "the build's folder on the gateway")
+  .action(async (manifest: string, options: { gateway: string; ref: string }) => {
+    const report = await checkMirror(readManifest(manifest), options.gateway, options.ref);
+    console.log(formatMirrorReport(report));
+    if (!mirrorPassed(report)) process.exitCode = EXIT_MIRROR_MISMATCH;
+  });
+
+program
   .command("publish")
   .description("Create the attestation entity on Arkiv. Does nothing if this builder already published the root")
   .argument("<attestation>", "path to attestation.json")
   .argument("<manifest>", "path to manifest.json")
-  .action(async (attestation: string, manifest: string) => {
-    const result = await runPublish(attestation, manifest);
+  .option("--mirror-ref <name>", "record this mirror in the attestation, after checking it byte for byte (needs --gateway)")
+  .option("--gateway <url>", 'mirror base URL: https, ending in "/" (needs --mirror-ref)')
+  .action(async (attestation: string, manifest: string, options: { mirrorRef?: string; gateway?: string }) => {
+    const result = await runPublish(attestation, manifest, options);
     console.log(result.created ? "published attestation" : "already published");
     console.log(`entity key: ${result.entityKey}`);
     if (result.created) console.log(`tx:         ${explorerTxUrl(result.txHash)}`);
     console.log(`builder:    ${explorerAddressUrl(result.creator)}`);
+    if (!result.created && options.mirrorRef !== undefined && result.swarmRef !== options.mirrorRef) {
+      console.error(`warning: mirror ref "${options.mirrorRef}" was NOT recorded. The existing readonly entity keeps ${result.swarmRef === null ? "no mirror ref" : `mirror ref "${result.swarmRef}"`}`);
+    }
   });
 
 program

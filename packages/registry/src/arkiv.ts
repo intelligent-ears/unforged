@@ -65,7 +65,7 @@ export interface AttestationAttributes {
   commit: string;
   manifest_root: string;
   recipe_digest: string;
-  swarm_ref: string; // 64-hex, or "none"
+  swarm_ref: string; // mirror reference (a folder on the policy's recovery.gateway), or "none"
 }
 
 export interface Published {
@@ -221,18 +221,19 @@ export async function fetchAttestations(
   return entries;
 }
 
-/** The key of this creator's attestation for a manifest root, or null. */
-export async function findAttestationKey(source: ReadSource, creator: Hex, manifestRoot: string): Promise<Hex | null> {
+/** This creator's attestation for a manifest root, or null. Publish's idempotency check. */
+export async function findAttestation(source: ReadSource, creator: Hex, manifestRoot: string): Promise<{ entityKey: Hex; swarmRef: string | null } | null> {
   const client = readClientFor(source);
   const { entities } = await withBackoff(() =>
     client
-      .select({ $key: true })
+      .select({ $key: true, swarm_ref: true })
       .where([eq("project", PROJECT), eq("entity_type", "attestation"), eq("manifest_root", manifestRoot)])
       .createdBy(creator)
       .limit(1)
       .fetch(),
   );
-  return entities[0]?.$key ?? null;
+  const entity = entities[0];
+  return entity === undefined ? null : { entityKey: entity.$key, swarmRef: swarmRefOf(entity.swarm_ref?.value) };
 }
 
 function readClientFor(source: ReadSource): ReadClient {

@@ -1,6 +1,6 @@
 import { HttpRequestError } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchAttestations, fetchPolicies, findAttestationKey, publishAttestation, publishPolicy, withBackoff, type WriteClient } from "./arkiv.js";
+import { fetchAttestations, fetchPolicies, findAttestation, publishAttestation, publishPolicy, withBackoff, type WriteClient } from "./arkiv.js";
 
 const CURATOR = "0x2222222222222222222222222222222222222222" as const;
 const PUBLIC_RPC = "https://rpc.rabdi.db-chain.testnet.arkiv.network";
@@ -154,7 +154,7 @@ describe("read functions, through the real SDK and viem over a stubbed fetch", (
     const source = { accessKey: "test-access-key" };
     await settled(fetchPolicies(source, CURATOR));
     await settled(fetchAttestations(source, CURATOR, "demo"));
-    await settled(findAttestationKey(source, CURATOR, "d".repeat(64)));
+    await settled(findAttestation(source, CURATOR, "d".repeat(64)));
     expect(urls).toEqual(Array(3).fill(`${PUBLIC_RPC}/test-access-key`));
   });
 

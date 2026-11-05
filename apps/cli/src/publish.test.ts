@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -92,8 +93,76 @@ describe("runPublish", () => {
       created: false,
       entityKey: "0xexisting",
       creator: account.address,
+      swarmRef: null,
     });
     expect(createEntity).not.toHaveBeenCalled();
+  });
+
+  describe("with a mirror", () => {
+    const GATEWAY = "https://mirror.example/";
+    const REF = "demo-1.0.0";
+    const BODY = "<html>";
+    const mirrored = { ...manifest, files: { "/index.html": createHash("sha256").update(BODY).digest("hex") } };
+    const mirror = { mirrorRef: REF, gateway: GATEWAY };
+    const serving = (body: string, status = 200) => vi.fn(async (_: string | URL | Request) => new Response(body, { status }));
+
+    beforeEach(async () => {
+      writeFileSync(manifestPath, JSON.stringify(mirrored));
+      writeFileSync(attestationPath, JSON.stringify(await signedBy(account, mirrored)));
+    });
+
+    it("stores the ref in swarm_ref when the mirror check passes", async () => {
+      const { value, createEntity } = clients();
+      const fetch = serving(BODY);
+      await runPublish(attestationPath, manifestPath, { env, clients: value, fetch, ...mirror });
+
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(String(fetch.mock.calls[0]?.[0])).toBe(`${GATEWAY}${REF}/index.html`);
+      expect((createEntity.mock.calls[0]?.[1] as Record<string, unknown>).swarm_ref).toBe(REF);
+    });
+
+    it.each([
+      ["a mismatch", "tampered", 200],
+      ["a 404", "", 404],
+    ])("refuses on %s, with exit 3, before touching the registry", async (_, body, status) => {
+      const { value, createEntity, query } = clients();
+      const refused = runPublish(attestationPath, manifestPath, { env, clients: value, fetch: serving(body, status), ...mirror });
+
+      await expect(refused).rejects.toMatchObject({ exitCode: 3, message: expect.stringContaining("0/1 match") });
+      expect(query.fetch).not.toHaveBeenCalled();
+      expect(createEntity).not.toHaveBeenCalled();
+    });
+
+    it("doesn't fetch the mirror for an attestation that doesn't verify", async () => {
+      writeFileSync(attestationPath, JSON.stringify(await signedBy(privateKeyToAccount(generatePrivateKey()), mirrored)));
+      const fetch = serving(BODY);
+      await expect(runPublish(attestationPath, manifestPath, { env, clients: clients().value, fetch, ...mirror })).rejects.toThrow(/does not verify/);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["--mirror-ref", { mirrorRef: REF }],
+      ["--gateway", { gateway: GATEWAY }],
+    ])("refuses %s alone rather than publishing with no mirror", async (_, partial) => {
+      const { value, createEntity } = clients();
+      await expect(runPublish(attestationPath, manifestPath, { env, clients: value, ...partial })).rejects.toMatchObject({ exitCode: 1 });
+      expect(createEntity).not.toHaveBeenCalled();
+    });
+
+    it("stays idempotent, and reports the ref the existing entity really holds", async () => {
+      const { value, createEntity, query } = clients(["0xexisting"]);
+      query.fetch.mockResolvedValue({ entities: [{ $key: "0xexisting", swarm_ref: { type: "str", value: "none" } }], blockNumber: 1n, skipped: 0 } as never);
+      const result = await runPublish(attestationPath, manifestPath, { env, clients: value, fetch: serving(BODY), ...mirror });
+
+      expect(result).toEqual({ created: false, entityKey: "0xexisting", creator: account.address, swarmRef: null });
+      expect(createEntity).not.toHaveBeenCalled();
+    });
+
+    it("never fetches without a mirror", async () => {
+      const fetch = serving(BODY);
+      await runPublish(attestationPath, manifestPath, { env, clients: clients().value, fetch });
+      expect(fetch).not.toHaveBeenCalled();
+    });
   });
 
   it("refuses an attestation signed by a different key, without spending gas", async () => {
