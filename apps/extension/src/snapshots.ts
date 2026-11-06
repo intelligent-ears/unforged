@@ -5,7 +5,7 @@ import { CURATOR_ADDRESS, MANUAL_SYNC_GAP_MS, SYNC_PERIOD_MINUTES } from "./conf
 import type { Snapshot } from "./decide.js";
 import { mirrorBase } from "./site.js";
 import { syncSummary, type SyncSummary } from "./summary.js";
-import { sync, type CachedEntry, type Registry } from "./sync.js";
+import { sync, withFixture, type CachedEntry, type Registry } from "./sync.js";
 
 // Set by Vite (vite.config.ts). Only an UNFORGED_FIXTURE=1 build contains the demo fixture.
 declare const __UNFORGED_FIXTURE__: boolean;
@@ -21,7 +21,7 @@ export const STORAGE = {
 const SYNC_ALARM = "unforged-sync";
 
 let synced: Snapshot | null = null; // last good synced snapshot
-let fixture: Snapshot | null = null; // demo fallback, only in a fixture build and only before a sync
+let fixture: Snapshot | null = null; // demo dapps, only in a fixture build; synced dapps take precedence
 let lastError: string | null = null;
 let running: Promise<void> | undefined;
 let lastManualSync = 0;
@@ -37,14 +37,14 @@ async function load(): Promise<void> {
   } catch (error) {
     console.error("unforged: could not read the stored snapshot", error);
   }
-  if (synced === null && __UNFORGED_FIXTURE__) {
+  if (__UNFORGED_FIXTURE__) {
     fixture = (await import("../fixtures/snapshot.json")).default as unknown as Snapshot;
   }
 }
 
-/** The snapshot enforcement uses, or null if there has never been a sync. */
+/** The snapshot enforcement uses (synced, plus fixture dapps in a fixture build), or null if there is none. */
 export function currentSnapshot(): Snapshot | null {
-  return synced ?? fixture;
+  return withFixture(synced, fixture);
 }
 
 export function summary(): SyncSummary {
@@ -82,7 +82,6 @@ async function runSync(): Promise<void> {
     return;
   }
   synced = result.snapshot;
-  fixture = null;
   await browser.storage.local.set({
     [STORAGE.snapshot]: result.snapshot,
     [STORAGE.entries]: result.entries,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { canonicalJSON, manifestRoot, statementDigest, type Hex, type Manifest, type Policy, type SignedAttestation, type Statement } from "@unforged/core";
-import { emptySyncState, errorText, sync, type CachedEntry, type Registry, type SyncState } from "./sync.js";
+import { emptySyncState, errorText, sync, withFixture, type CachedEntry, type Registry, type SyncState } from "./sync.js";
 
 const CURATOR = "0x9373547bD5171EA42f2A63ED27E631FDCDc43E93";
 const NOW = new Date("2026-11-05T10:00:00Z");
@@ -177,5 +177,34 @@ describe("errorText", () => {
     expect(text).not.toContain("s3cret-key");
     expect(text.length).toBeLessThanOrEqual(300);
     expect(errorText("plain", "")).toBe("plain");
+  });
+});
+
+describe("withFixture", () => {
+  const entry = (dapp: string, origin: string, policyVersion: number) => ({
+    policy: policy({ dapp, origins: [origin] }),
+    releases: [],
+    policyVersion,
+  });
+  const fixture = { syncedAt: "2026-11-01T00:00:00Z", dapps: { demo: entry("demo", "http://localhost:8080", 0) } };
+
+  it("fills in fixture dapps the synced snapshot doesn't have", () => {
+    const merged = withFixture({ syncedAt: NOW.toISOString(), dapps: {} }, fixture);
+    expect(merged?.syncedAt).toBe(NOW.toISOString());
+    expect(merged?.dapps.demo).toEqual(fixture.dapps.demo);
+    expect(withFixture(null, fixture)).toEqual(fixture);
+  });
+
+  it("keeps the synced entry for a dapp both have, and lists synced dapps first", () => {
+    const synced = { syncedAt: NOW.toISOString(), dapps: { other: entry("other", "http://other", 2), demo: entry("demo", "http://synced", 3) } };
+    const merged = withFixture(synced, { ...fixture, dapps: { extra: entry("extra", "http://extra", 0), ...fixture.dapps } });
+    expect(merged?.dapps.demo).toEqual(synced.dapps.demo);
+    expect(Object.keys(merged!.dapps)).toEqual(["other", "demo", "extra"]);
+  });
+
+  it("is the synced snapshot when there is no fixture", () => {
+    const synced = { syncedAt: NOW.toISOString(), dapps: {} };
+    expect(withFixture(synced, null)).toBe(synced);
+    expect(withFixture(null, null)).toBeNull();
   });
 });

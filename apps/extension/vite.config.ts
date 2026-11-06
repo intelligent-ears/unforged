@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
 // background.ts and the HTML pages are separate entries; public/manifest.json is copied as-is.
-// UNFORGED_FIXTURE=1 bundles the demo snapshot as a fallback until the first sync; the default
+// UNFORGED_FIXTURE=1 bundles the demo snapshot, whose dapps fill in for any the sync lacks; the default
 // build leaves it out entirely (scripts/check-no-fixture.mjs checks that).
 export default defineConfig({
   root: "src",

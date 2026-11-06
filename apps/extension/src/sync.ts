@@ -98,6 +98,17 @@ function uniqueAddresses(addresses: Hex[]): Hex[] {
   return addresses.filter((a, i) => addresses.findIndex((b) => sameAddress(a, b)) === i);
 }
 
+/**
+ * The demo fixture (UNFORGED_FIXTURE=1 builds only) fills in dapps the synced snapshot lacks; a
+ * synced entry always wins. Synced dapps come first, so they also win a lookup by origin.
+ */
+export function withFixture(synced: Snapshot | null, fixture: Snapshot | null): Snapshot | null {
+  if (fixture === null) return synced;
+  if (synced === null) return fixture;
+  const missing = Object.entries(fixture.dapps).filter(([dapp]) => !Object.hasOwn(synced.dapps, dapp));
+  return { syncedAt: synced.syncedAt, dapps: { ...synced.dapps, ...Object.fromEntries(missing) } };
+}
+
 /** What a change is measured on: policies, versions and accepted releases, not the sync time. */
 function contentOf(snapshot: Snapshot | null): string {
   return snapshot === null ? "" : canonicalJSON(snapshot.dapps);
