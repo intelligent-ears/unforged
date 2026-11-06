@@ -22,7 +22,6 @@ What's not there yet: dapps beyond Lido, and Chrome, which can't read response b
 
 ## Will we keep building after Mumbai?
 
-<!-- TEAM: confirm or edit these before submitting. -->
 
 Next steps, in order:
 
