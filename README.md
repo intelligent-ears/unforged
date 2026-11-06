@@ -6,7 +6,7 @@ In February 2025, one tampered JavaScript file on Safe{Wallet}'s hosting cost By
 
 No cooperation from the dapp is needed. Anyone can protect the users of an open-source dapp by rebuilding it.
 
-- [Architecture](docs/architecture.md) · [Formats](docs/formats.md) · [Extension](docs/extension.md) · [CLI and registry](docs/cli-registry.md) · [Threat model](docs/threat-model.md) · [Demo](docs/demo.md)
+- [Website](http://intelears.me/unforged/) · [Architecture](docs/architecture.md) · [Formats](docs/formats.md) · [Extension](docs/extension.md) · [CLI and registry](docs/cli-registry.md) · [Threat model](docs/threat-model.md) · [Demo](docs/demo.md)
 - Arkiv: [schema](arkiv/schema.md) · [how we use it](arkiv/how-you-use-arkiv.md) · [why Arkiv](arkiv/why-arkiv.md) · [reach](arkiv/reach.md) · [friction log](arkiv/friction.md)
 - [Reproducibility study](study/README.md): 13 dapp frontends, which ones rebuild byte for byte, and why the rest don't
 

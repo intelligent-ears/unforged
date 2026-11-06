@@ -1,11 +1,13 @@
-// The site's only script. Replays the hero once; the HTML is already the final state.
-(() => {
+// The hero's animation, inlined right after its markup so it blanks the hashes
+// before the first paint rather than after the bundle hydrates. The server-rendered
+// markup is already the final state, so with JS off or reduced motion nothing runs.
+export const REPLAY_SCRIPT = `(() => {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-  const assay = document.querySelector(".assay");
-  const rows = [...assay.querySelectorAll(".assay-row")].map((row) => ({
-    cells: [...row.querySelectorAll(".hash span")],
-    status: row.querySelector(".status"),
+  const assay = document.querySelector(".uf-assay");
+  const rows = [...assay.querySelectorAll(".uf-assay-row")].map((row) => ({
+    cells: [...row.querySelectorAll(".uf-hash span")],
+    status: row.querySelector(".uf-status"),
   }));
   const [builder1, builder2, served] = rows;
 
@@ -60,4 +62,4 @@
     if (next < steps.length) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-})();
+})();`;

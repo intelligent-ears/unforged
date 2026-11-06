@@ -1,0 +1,659 @@
+/* Fonts are self-hosted: the site makes no third-party requests. */
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/400-italic.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans-condensed/500.css";
+@import "@fontsource/ibm-plex-sans-condensed/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+:root {
+  /* Unforged's roles. Green, red and amber mean verified, blocked and waiting, nothing else. */
+  --uf-page: #eef1f2;
+  --uf-surface: #ffffff;
+  --uf-ink: #1b2a41;
+  --uf-slate: #5b6b7a;
+  --uf-verified: #1f7a5c;
+  --uf-blocked: #b3261e;
+  --uf-waiting: #b7791f;
+  --uf-rule: #cdd4d9;
+
+  --uf-font-heading: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --uf-text-lg: 1.25rem;
+  --uf-text-xl: 1.625rem;
+  --uf-text-2xl: 2.25rem;
+  --uf-text-hero: clamp(2.75rem, 1.6rem + 4.2vw, 4.75rem);
+  --uf-gutter: clamp(1rem, 4vw, 3rem);
+  --uf-band-space: clamp(3rem, 7vw, 5.5rem);
+
+  /* Infima */
+  --ifm-color-primary: #1b2a41;
+  --ifm-color-primary-dark: #18263b;
+  --ifm-color-primary-darker: #172337;
+  --ifm-color-primary-darkest: #131d2e;
+  --ifm-color-primary-light: #1e2e47;
+  --ifm-color-primary-lighter: #1f314b;
+  --ifm-color-primary-lightest: #233754;
+}
+
+html[data-theme="dark"] {
+  --uf-page: #12181f;
+  --uf-surface: #1b232d;
+  --uf-ink: #e8edf1;
+  --uf-slate: #a9b5c0;
+  --uf-verified: #4cc99f;
+  --uf-blocked: #ff8f85;
+  --uf-waiting: #e3ad52;
+  --uf-rule: #36424f;
+
+  --ifm-color-primary: #a9bdd6;
+  --ifm-color-primary-dark: #92abca;
+  --ifm-color-primary-darker: #87a2c4;
+  --ifm-color-primary-darkest: #648ab1;
+  --ifm-color-primary-light: #c0cfe2;
+  --ifm-color-primary-lighter: #cbd8e8;
+  --ifm-color-primary-lightest: #edf1f7;
+}
+
+/* Infima, on the roles above. Infima sets these under html[data-theme="dark"] too, so that selector must match it. */
+:root,
+html[data-theme="dark"] {
+  --ifm-color-success: var(--uf-verified);
+  --ifm-color-danger: var(--uf-blocked);
+  --ifm-color-warning: var(--uf-waiting);
+
+  --ifm-background-color: var(--uf-page);
+  --ifm-background-surface-color: var(--uf-page);
+  --ifm-font-color-base: var(--uf-ink);
+  --ifm-heading-color: var(--uf-ink);
+  --ifm-font-family-base: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ifm-heading-font-family: var(--uf-font-heading);
+  --ifm-font-family-monospace: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --ifm-heading-font-weight: 600;
+  --ifm-font-size-base: 106.25%;
+  --ifm-line-height-base: 1.6;
+  --ifm-code-font-size: 90%;
+  --ifm-code-background: var(--uf-surface);
+  --ifm-link-color: var(--uf-ink);
+  --ifm-link-decoration: underline;
+  --ifm-link-hover-color: var(--uf-ink);
+  --ifm-link-hover-decoration: underline;
+  --ifm-navbar-shadow: 0 1px 0 var(--uf-rule);
+  --ifm-navbar-background-color: var(--uf-page);
+  --ifm-footer-background-color: var(--uf-page);
+  --ifm-footer-padding-horizontal: var(--uf-gutter);
+  --ifm-footer-color: var(--uf-slate);
+  --ifm-footer-link-color: var(--uf-slate);
+  --ifm-footer-link-hover-color: var(--uf-ink);
+  --ifm-toc-border-color: var(--uf-rule);
+  --ifm-hr-border-color: var(--uf-rule);
+  --ifm-table-border-color: var(--uf-rule);
+  --ifm-table-background: transparent;
+  --ifm-table-stripe-background: transparent;
+  --ifm-table-head-background: transparent;
+  --docusaurus-highlighted-code-line-bg: var(--uf-rule);
+}
+
+/* Docs */
+
+a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--uf-ink);
+  outline-offset: 2px;
+}
+
+.navbar a,
+.menu a,
+.pagination-nav__link,
+.table-of-contents a,
+.footer a,
+.hash-link {
+  text-decoration: none;
+}
+
+.navbar__title {
+  font-family: var(--uf-font-heading);
+  font-size: var(--uf-text-lg);
+}
+
+.markdown h1:first-child {
+  --ifm-h1-font-size: clamp(2.25rem, 1.8rem + 2vw, 3rem);
+}
+
+.markdown > h2 {
+  --ifm-h2-font-size: var(--uf-text-2xl);
+}
+
+.markdown > h3 {
+  --ifm-h3-font-size: var(--uf-text-xl);
+}
+
+.markdown {
+  max-width: 72ch;
+}
+
+.markdown a,
+.markdown code {
+  overflow-wrap: anywhere;
+}
+
+/* Markdown tables scroll inside themselves, so their code never has to break mid-word. */
+.markdown table {
+  background: var(--uf-surface);
+}
+
+.markdown table code {
+  overflow-wrap: normal;
+}
+
+.markdown table a {
+  overflow-wrap: normal;
+}
+
+.markdown th {
+  border-bottom: 1px solid var(--uf-ink);
+  text-align: left;
+}
+
+.markdown td {
+  vertical-align: top;
+}
+
+@media (max-width: 40rem) {
+  .markdown th,
+  .markdown td {
+    min-width: 7rem;
+  }
+}
+
+code {
+  border: 1px solid var(--uf-rule);
+}
+
+pre code,
+.uf-root code,
+.uf-table-scroll code {
+  border: 0;
+}
+
+pre,
+.theme-code-block {
+  border: 1px solid var(--uf-rule);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+pre {
+  border: 0;
+}
+
+.menu__link {
+  border-radius: 0;
+  font-weight: 400;
+}
+
+.menu__link--active {
+  background: transparent;
+}
+
+.theme-doc-sidebar-item-link .menu__link--active {
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--uf-ink);
+  font-weight: 600;
+}
+
+/* Sidebar groups are fixed labels, not links, so they never look active. */
+.theme-doc-sidebar-item-category > .menu__list-item-collapsible,
+.theme-doc-sidebar-item-category > .menu__list-item-collapsible:hover {
+  background: transparent;
+}
+
+.theme-doc-sidebar-item-category > .menu__list-item-collapsible > .menu__link,
+.theme-doc-sidebar-item-category > .menu__list-item-collapsible > .menu__link:hover {
+  background: transparent;
+  box-shadow: none;
+  color: var(--uf-slate);
+  cursor: default;
+  font-weight: 400;
+}
+
+.footer {
+  border-top: 1px solid var(--uf-rule);
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.footer .text--center {
+  text-align: left;
+}
+
+.footer .container {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Landing page */
+
+.uf-landing h2 {
+  margin: 0 0 1.25rem;
+  font-size: var(--uf-text-2xl);
+}
+
+.uf-landing p {
+  margin: 1rem 0 0;
+}
+
+.uf-landing h2 + p {
+  margin-top: 0;
+}
+
+.uf-landing a:not(.uf-button) {
+  text-decoration: underline;
+}
+
+.uf-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.5rem;
+  padding: clamp(2.5rem, 6vw, 5rem) var(--uf-gutter);
+  border-bottom: 1px solid var(--uf-rule);
+}
+
+.uf-hero h1 {
+  margin: 0;
+  font-size: var(--uf-text-hero);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+}
+
+.uf-hero p.uf-lede {
+  max-width: 34rem;
+  margin: 1.5rem 0 0;
+  font-size: var(--uf-text-lg);
+  line-height: 1.5;
+}
+
+.uf-hero p.uf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 2rem 0 0;
+}
+
+.uf-button {
+  display: inline-block;
+  padding: 0.65rem 1.15rem;
+  border: 1px solid var(--uf-ink);
+  color: var(--uf-ink);
+  font-weight: 600;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.uf-button:hover {
+  box-shadow: inset 0 0 0 1px var(--uf-ink);
+  color: var(--uf-ink);
+  text-decoration: none;
+}
+
+.uf-button-primary,
+.uf-button-primary:hover {
+  background: var(--uf-ink);
+  color: var(--uf-page);
+}
+
+@media (min-width: 60rem) {
+  .uf-hero {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: clamp(2.5rem, 5vw, 5rem);
+  }
+}
+
+/* The assay record: the hero visual */
+
+.uf-assay {
+  --uf-hash-size: 0.9375rem;
+  margin: 0;
+  padding: 1rem;
+  background: var(--uf-surface);
+  border: 1px solid var(--uf-rule);
+  border-top: 3px solid var(--uf-ink);
+}
+
+@media (min-width: 26rem) {
+  .uf-assay {
+    --uf-hash-size: 1rem;
+  }
+}
+
+@media (min-width: 60rem) {
+  .uf-assay {
+    --uf-hash-size: 1.25rem;
+    padding: 1.5rem;
+  }
+}
+
+.uf-assay-row + .uf-assay-row {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--uf-rule);
+}
+
+.uf-assay-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 1rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.uf-assay-label,
+.uf-status-final {
+  font-weight: 600;
+}
+
+.uf-status-match {
+  color: var(--uf-verified);
+}
+
+.uf-status-mismatch {
+  color: var(--uf-blocked);
+}
+
+.uf-status-waiting {
+  display: none;
+  color: var(--uf-slate);
+}
+
+.uf-status-waiting::before {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: var(--uf-waiting);
+  vertical-align: 0.1em;
+}
+
+.uf-hash {
+  display: grid;
+  grid-template-columns: repeat(32, 1ch);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: var(--uf-hash-size);
+  line-height: 1.45;
+}
+
+.uf-hash .ok {
+  color: var(--uf-verified);
+}
+
+.uf-hash .bad {
+  color: var(--uf-blocked);
+  font-weight: 500;
+}
+
+.uf-landing p.uf-verdict {
+  display: inline-block;
+  margin: 1.25rem 0 0;
+  padding: 0.2rem 0.7rem 0.25rem;
+  border: 3px double var(--uf-blocked);
+  color: var(--uf-blocked);
+  font-family: var(--uf-font-heading);
+  font-size: var(--uf-text-xl);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.uf-assay figcaption {
+  max-width: 24rem;
+  margin-top: 0.85rem;
+  color: var(--uf-slate);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.uf-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* While the replay runs. Without "running" the markup is the final state. */
+
+.uf-assay.running .uf-hash span {
+  visibility: hidden;
+  color: var(--uf-ink);
+}
+
+.uf-assay.running .uf-hash .shown {
+  visibility: visible;
+}
+
+.uf-assay.running .uf-hash .ok.settled {
+  color: var(--uf-verified);
+}
+
+.uf-assay.running .uf-hash .bad.settled {
+  color: var(--uf-blocked);
+}
+
+.uf-assay.running .uf-status-waiting {
+  display: inline;
+}
+
+.uf-assay.running .uf-status-final {
+  display: none;
+}
+
+.uf-assay.running .uf-status.settled .uf-status-waiting {
+  display: none;
+}
+
+.uf-assay.running .uf-status.settled .uf-status-final {
+  display: inline;
+}
+
+.uf-assay.running .uf-verdict {
+  visibility: hidden;
+}
+
+.uf-assay.stamped .uf-verdict {
+  animation: uf-stamp 180ms ease-out;
+}
+
+@keyframes uf-stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uf-assay.stamped .uf-verdict {
+    animation: none;
+  }
+}
+
+/* Landing sections */
+
+.uf-band {
+  padding: var(--uf-band-space) var(--uf-gutter) 0;
+}
+
+.uf-band > * {
+  max-width: 72ch;
+}
+
+.uf-band-wide > .uf-table-scroll {
+  max-width: none;
+}
+
+.uf-landing > .uf-band:last-child {
+  padding-bottom: var(--uf-band-space);
+}
+
+.uf-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.uf-steps li {
+  position: relative;
+  margin: 0;
+  padding: 1.25rem 0 1.25rem 3.25rem;
+  border-top: 1px solid var(--uf-rule);
+  counter-increment: step;
+}
+
+.uf-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0.85rem;
+  color: var(--uf-slate);
+  font-family: var(--uf-font-heading);
+  font-size: var(--uf-text-2xl);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.uf-steps h3 {
+  margin: 0 0 0.25rem;
+  font-size: var(--uf-text-lg);
+}
+
+.uf-landing .uf-steps p {
+  margin: 0;
+}
+
+.uf-landing p.uf-root {
+  margin-block: 1rem 1.5rem;
+  color: var(--uf-verified);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.uf-root code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.uf-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--uf-surface);
+  border: 1px solid var(--uf-rule);
+}
+
+.uf-table-scroll table {
+  display: table;
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.uf-table-scroll tr {
+  border: 0;
+  background: transparent;
+}
+
+.uf-table-scroll th,
+.uf-table-scroll td {
+  padding: 0.55rem 0.75rem;
+  border: 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.uf-table-scroll th {
+  border-bottom: 1px solid var(--uf-ink);
+  font-weight: 600;
+}
+
+.uf-table-scroll tbody tr + tr td {
+  border-top: 1px solid var(--uf-rule);
+}
+
+.uf-table-scroll code {
+  padding: 0;
+  background: transparent;
+  white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+  .uf-table-scroll th,
+  .uf-table-scroll td {
+    min-width: 7rem;
+  }
+}
+
+.uf-ledger,
+.uf-tally {
+  margin: 0;
+}
+
+.uf-ledger > div,
+.uf-tally > div {
+  display: grid;
+  gap: 0.15rem 1.5rem;
+  padding-block: 0.85rem;
+  border-top: 1px solid var(--uf-rule);
+}
+
+.uf-ledger dt {
+  margin: 0;
+  font-family: var(--uf-font-heading);
+  font-size: var(--uf-text-lg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.uf-ledger dd,
+.uf-tally dd {
+  margin: 0;
+}
+
+.uf-ledger code {
+  padding: 0.1rem 0.3rem;
+}
+
+.uf-tally > div {
+  grid-template-columns: 3rem minmax(0, 1fr);
+  align-items: baseline;
+}
+
+.uf-tally dt {
+  margin: 0;
+  font-family: var(--uf-font-heading);
+  font-size: var(--uf-text-2xl);
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+@media (min-width: 40rem) {
+  .uf-ledger > div {
+    grid-template-columns: 11rem minmax(0, 1fr);
+    align-items: baseline;
+  }
+}
