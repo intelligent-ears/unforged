@@ -1,5 +1,5 @@
 // Writes fixtures/snapshot.json: a hand-made sync snapshot (extension.md sync step 5) for the Lido demo.
-// Bundled into background.js until M9 replaces it with the snapshot synced from Arkiv.
+// Bundled only into an UNFORGED_FIXTURE=1 build, as the fallback before the first sync from Arkiv.
 import { readFile, writeFile } from "node:fs/promises";
 import { manifestRoot, sha256Hex } from "@unforged/core";
 

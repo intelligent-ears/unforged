@@ -1,15 +1,23 @@
 // Background event page: buffers code responses on policy tabs, decides with decide.ts and
 // applies the result (extension.md "Background: enforcement"). Also answers the UI's messages.
+// The snapshot comes from the periodic sync in snapshots.ts.
 import type { Blocked, TabState, Verdict } from "@unforged/core";
-import snapshotJson from "../fixtures/snapshot.json";
 import { classify, originOf } from "./classify.js";
-import { decide, newTab, type Snapshot, type TabRecord } from "./decide.js";
+import { decide, newTab, type TabRecord } from "./decide.js";
 import { countsAsEvidence, keepsTabState, showsBlockedPage } from "./navigation.js";
-import { snapshotSummary } from "./summary.js";
+import { pathIn, siteFor, verifiedCopyUrl, type Site } from "./site.js";
+import { currentSnapshot, ready, scheduleSync, summary, syncNow } from "./snapshots.js";
 
-// Bundled fixture until M9 replaces it with the snapshot synced from Arkiv.
-const snapshot = snapshotJson as unknown as Snapshot;
-const policyOrigins = Object.values(snapshot.dapps).flatMap((d) => d.policy.origins);
+let snapshotLoaded = false;
+void ready.then(() => {
+  snapshotLoaded = true;
+});
+
+/** The site of a top-level document URL in the current snapshot. */
+function siteAt(url: string | undefined): Site | undefined {
+  const snapshot = currentSnapshot();
+  return snapshot ? siteFor(snapshot, url) : undefined;
+}
 
 const BLOCKED_BODY_LIMIT = 200 * 1024;
 const SCRIPT_TYPES = new Set(["script", "worker", "xmlhttprequest"]);
@@ -17,6 +25,8 @@ const BLOCKED_PAGE = browser.runtime.getURL("blocked.html");
 
 interface Tab {
   origin: string | undefined;
+  site: Site | undefined; // the dapp site of the top-level document, fixed for the page load
+  path: string; // that document's path inside the site, for "Open verified copy"
   record: TabRecord;
   blockedBodies: Map<string, string>; // url -> first 200 KB of a blocked script, memory only
   documentPending: boolean; // a policy document is loading and hasn't committed yet
@@ -25,8 +35,8 @@ interface Tab {
 
 const tabs = new Map<number, Tab>();
 
-function newTabEntry(origin: string | undefined): Tab {
-  return { origin, record: newTab(), blockedBodies: new Map(), documentPending: false, blockedPageShown: false };
+function newTabEntry(origin: string | undefined, site?: Site, path = "/"): Tab {
+  return { origin, site, path, record: newTab(), blockedBodies: new Map(), documentPending: false, blockedPageShown: false };
 }
 
 function tabFor(tabId: number): Tab {
@@ -103,7 +113,7 @@ async function showBlockedPage(tabId: number, tab: Tab, tabOrigin: string, reque
   await browser.tabs.update(tabId, { url: `${BLOCKED_PAGE}?tab=${tabId}` });
 }
 
-function filterBody(details: browser.webRequest._OnBeforeRequestDetails, tabOrigin: string): void {
+function filterBody(details: browser.webRequest._OnBeforeRequestDetails, tabOrigin: string, site: Site): void {
   const filter = browser.webRequest.filterResponseData(details.requestId);
   const chunks: Uint8Array[] = [];
   const tab = tabFor(details.tabId); // the page this request belongs to, even if the tab moves on
@@ -123,7 +133,10 @@ function filterBody(details: browser.webRequest._OnBeforeRequestDetails, tabOrig
       return;
     }
     try {
-      const decision = await decide(snapshot, tab.record, { url: details.url, type: details.type, tabOrigin, body });
+      const snapshot = currentSnapshot();
+      if (!snapshot) throw new Error("no snapshot");
+      const request = { url: details.url, type: details.type, tabOrigin, site, body };
+      const decision = await decide(snapshot, tab.record, request);
       if (decision.allow) {
         filter.write(body);
         filter.close();
@@ -150,19 +163,34 @@ function filterBody(details: browser.webRequest._OnBeforeRequestDetails, tabOrig
   if (details.type === "main_frame") tab.documentPending = true;
 }
 
+/** The document's path in its site, if it can be read; "Open verified copy" falls back to "/". */
+function documentPath(site: Site | undefined, url: string): string {
+  try {
+    return (site && pathIn(site, url)) ?? "/";
+  } catch {
+    return "/";
+  }
+}
+
+/** Until the stored snapshot is loaded, which sites to check is unknown: hold requests until it is. */
 function onBeforeRequest(
   details: browser.webRequest._OnBeforeRequestDetails,
-): browser.webRequest.BlockingResponse {
+): browser.webRequest.BlockingResponse | Promise<browser.webRequest.BlockingResponse> {
+  if (!snapshotLoaded) return ready.then(() => handleRequest(details));
+  return handleRequest(details);
+}
+
+function handleRequest(details: browser.webRequest._OnBeforeRequestDetails): browser.webRequest.BlockingResponse {
   if (details.tabId < 0 || details.url.startsWith(browser.runtime.getURL(""))) return {};
-  const { tabOrigin, filter } = classify(details, tabs.get(details.tabId)?.origin, policyOrigins);
+  const { tabOrigin, site, filter } = classify(details, tabs.get(details.tabId), siteAt);
   if (details.type === "main_frame") {
     // Top-level navigation resets the tab; decide() fills in the dapp once the document is checked.
-    tabs.set(details.tabId, newTabEntry(tabOrigin));
+    tabs.set(details.tabId, newTabEntry(tabOrigin, site, documentPath(site, details.url)));
     void showState(details.tabId);
   }
-  if (!filter || !tabOrigin) return {};
+  if (!filter || !tabOrigin || !site) return {};
   try {
-    filterBody(details, tabOrigin);
+    filterBody(details, tabOrigin, site);
     return {};
   } catch (error) {
     // Couldn't attach a filter, so the body can't be checked: cancel instead of allowing.
@@ -184,9 +212,18 @@ async function resetTab(tabId: number, url: string): Promise<void> {
   }
 }
 
+/**
+ * Whether a URL is still on the tab's dapp: a policy origin or mirror folder, or the host of the
+ * tab's own site, which a mirror page's pushState can move to without leaving the page.
+ */
+function onSite(tab: Tab | undefined, url: string): boolean {
+  if (siteAt(url) !== undefined) return true;
+  return tab?.site !== undefined && originOf(url) === originOf(tab.site.base);
+}
+
 function onTabUrlChanged(tabId: number, url: string): void {
   const tab = tabs.get(tabId);
-  if (keepsTabState(url, policyOrigins, BLOCKED_PAGE)) {
+  if (keepsTabState(url, (u) => onSite(tab, u), BLOCKED_PAGE)) {
     if (tab) tab.documentPending = false;
     return;
   }
@@ -201,7 +238,9 @@ function onTabUrlChanged(tabId: number, url: string): void {
 type Message =
   | { type: "getTabState"; tabId: number }
   | { type: "getSnapshotSummary" }
-  | { type: "getBlockedBody"; tabId: number; url: string };
+  | { type: "getBlockedBody"; tabId: number; url: string }
+  | { type: "openVerifiedCopy"; tabId: number }
+  | { type: "syncNow" };
 
 async function getTabState(tabId: number): Promise<TabState> {
   const inMemory = tabs.get(tabId)?.record.state;
@@ -216,15 +255,31 @@ function getBlockedBody(tabId: number, url: string): { body: string } | { error:
   return body === undefined ? { error: "no blocked body kept for this file" } : { body };
 }
 
+/** Sends the tab to the mirrored copy of its release (or the newest mirrored one), at the same path. */
+async function openVerifiedCopy(tabId: number): Promise<{ ok: true } | { error: string }> {
+  await ready;
+  const snapshot = currentSnapshot();
+  const tab = tabs.get(tabId);
+  if (!snapshot || !tab) return { error: "nothing is known about this tab" };
+  const target = verifiedCopyUrl(snapshot, tab.site?.dapp ?? tab.record.state.dapp, tab.record.lock, tab.path);
+  if ("error" in target) return target;
+  await browser.tabs.update(tabId, { url: target.url });
+  return { ok: true };
+}
+
 function onMessage(message: Message, sender: browser.runtime.MessageSender): Promise<unknown> | undefined {
   if (sender.id !== browser.runtime.id) return undefined;
   switch (message?.type) {
     case "getTabState":
       return getTabState(message.tabId);
     case "getSnapshotSummary":
-      return Promise.resolve(snapshotSummary(snapshot));
+      return ready.then(summary);
     case "getBlockedBody":
       return Promise.resolve(getBlockedBody(message.tabId, message.url));
+    case "openVerifiedCopy":
+      return openVerifiedCopy(message.tabId).catch((error: unknown) => ({ error: String(error) }));
+    case "syncNow":
+      return syncNow();
     default:
       return undefined;
   }
@@ -235,9 +290,11 @@ browser.runtime.onMessage.addListener(onMessage);
 // Firefox may reset per-tab badges when a page commits; repaint from our state.
 browser.tabs.onUpdated.addListener((tabId, change, tab) => {
   if (change.url) onTabUrlChanged(tabId, change.url);
-  if (change.status && tab.url && keepsTabState(tab.url, policyOrigins, BLOCKED_PAGE)) void showState(tabId);
+  const record = tabs.get(tabId);
+  if (change.status && tab.url && keepsTabState(tab.url, (u) => onSite(record, u), BLOCKED_PAGE)) void showState(tabId);
 });
 browser.tabs.onRemoved.addListener((tabId) => {
   tabs.delete(tabId);
   void browser.storage.session.remove(`tab:${tabId}`);
 });
+scheduleSync();

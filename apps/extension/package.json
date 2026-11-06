@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/check-no-fixture.mjs",
     "test": "vitest run",
-    "fixture:snapshot": "node scripts/make-fixture-snapshot.mjs"
+    "fixture:snapshot": "node scripts/make-fixture-snapshot.mjs",
+    "build:fixture": "UNFORGED_FIXTURE=1 pnpm build"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.1",

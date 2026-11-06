@@ -2,6 +2,15 @@
 import type { SnapshotSummary } from "@unforged/core";
 import type { Snapshot } from "./decide.js";
 
+/** SnapshotSummary plus why the last sync failed. The extra field is the extension's own. */
+export interface SyncSummary extends SnapshotSummary {
+  lastError: string | null;
+}
+
+export function syncSummary(snapshot: Snapshot | null, lastError: string | null): SyncSummary {
+  return snapshot === null ? { syncedAt: null, dapps: [], lastError } : { ...snapshotSummary(snapshot), lastError };
+}
+
 export function snapshotSummary(snapshot: Snapshot): SnapshotSummary {
   return {
     syncedAt: snapshot.syncedAt,
