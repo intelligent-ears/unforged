@@ -88,9 +88,9 @@ All entities: `project = "unforged"` (str, indexed), created `readonly`, `expira
 |---|---|---|---|
 | `entity_type` | str | yes | `policy` |
 | `dapp` | str | yes | `lido-staking-widget` |
-| `version` | u64 | yes | increasing; the extension uses the highest |
+| `version` | u64 | yes | increasing; the extension uses the highest. Must equal the payload's signed `version` |
 | `content_type` | str | no | `application/gzip` |
-| `payload` | bytes | no | `gzip(canonicalJSON({ policy: Policy, signature }))` |
+| `payload` | bytes | no | `gzip(canonicalJSON({ policy: Policy, version, signature }))` |
 
 Payload:
 ```ts
@@ -111,10 +111,11 @@ Signed payload:
 ```ts
 interface SignedPolicy {
   policy: Policy;
-  signature: `0x${string}`;          // EIP-191 personal_sign over the 32-byte digest sha256(canonicalJSON(policy)), signed as raw bytes
+  version: number;                   // equals the entity's `version` attribute
+  signature: `0x${string}`;          // EIP-191 personal_sign over the 32-byte digest sha256(canonicalJSON({ policy, version })), signed as raw bytes
 }
 ```
-Verification: recover the signer from `signature` and the digest. It must equal the configured curator address **and** the Arkiv entity's `$creator`. A payload that is unsigned, mis-signed or malformed is dropped, so Arkiv is untrusted storage for policies too. The `version` attribute is not covered by the signature.
+Verification: recover the signer from `signature` and the digest. It must equal the configured curator address **and** the Arkiv entity's `$creator`, and the signed `version` must equal the entity's `version` attribute. A payload that is unsigned, mis-signed, relabelled with another version or malformed is dropped, so Arkiv is untrusted storage for policies too.
 
 A file of a mirrored release is at `gatewayUrl(recovery.gateway, ref, path)`. `configPins` is signed by the curator with the rest of the policy (the `SignedPolicy` signature above). A config file not listed here is blocked, so changing a deployment's config means publishing a new policy version.
 

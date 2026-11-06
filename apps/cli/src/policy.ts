@@ -43,7 +43,7 @@ export interface PolicyResult {
   curator: Hex;
 }
 
-/** Signs a policy with the curator key and publishes it as the next version for its dapp. */
+/** Signs a policy and its next version number with the curator key, then publishes it. */
 export async function runPolicy(policyPath: string, options: PolicyOptions = {}): Promise<PolicyResult> {
   const { env = process.env } = options;
   const account = accountFromEnv("CURATOR_PRIVATE_KEY", env);
@@ -54,9 +54,9 @@ export async function runPolicy(policyPath: string, options: PolicyOptions = {})
   const versions = published.filter((p) => p.policy.dapp === policy.dapp).map((p) => p.version);
   const version = Math.max(0, ...versions) + 1;
 
-  const signed = await signPolicy(policy, account);
+  const signed = await signPolicy(policy, version, account);
   await checkSigned(signed, account.address);
-  const { entityKey, txHash } = await registryWrite(() => publishPolicy(write, signed, version, prepare), env);
+  const { entityKey, txHash } = await registryWrite(() => publishPolicy(write, signed, prepare), env);
   return { entityKey, txHash, version, curator: account.address };
 }
 

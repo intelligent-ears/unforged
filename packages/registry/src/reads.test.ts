@@ -22,11 +22,11 @@ describe("schemas", () => {
 
   const anything = {} as never;
   const attrs = { dapp: "d", release: "r", commit: "c", manifest_root: "m", recipe_digest: "g", swarm_ref: "none" };
-  const policy = { policy: { dapp: "d" }, signature: "0x" } as never;
+  const policy = { policy: { dapp: "d" }, version: 1, signature: "0x" } as never;
 
   it("has one schema per entity kind, with the formats.md attributes", async () => {
     const attestation = await schemaUsedBy((c) => publishAttestation(c, anything, attrs));
-    const policySchema = await schemaUsedBy((c) => publishPolicy(c, policy, 1));
+    const policySchema = await schemaUsedBy((c) => publishPolicy(c, policy));
 
     expect(attestation).not.toBe(policySchema);
     expect(Object.keys(attestation.columns).sort()).toEqual(

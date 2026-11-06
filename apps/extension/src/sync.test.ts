@@ -230,12 +230,13 @@ describe("sync over the real registry decoder", () => {
     return { fetchPolicies: (c) => fetchPolicies(client, c), fetchAttestations: async () => [] };
   }
 
-  it("ignores forged, tampered, unsigned and wrong-creator policies and keeps the curator's", async () => {
-    const genuine = await signPolicy(policy({ threshold: 2 }), curator);
+  it("ignores forged, tampered, relabelled, unsigned and wrong-creator policies and keeps the curator's", async () => {
+    const genuine = await signPolicy(policy({ threshold: 2 }), 1, curator);
     const permissive = policy({ threshold: 1, builders: [forger.address] });
     const reg = lyingArkiv([
       { creator: curator.address, version: 1n, payload: genuine },
-      { creator: curator.address, version: 5n, payload: await signPolicy(permissive, forger) }, // signed by another key
+      { creator: curator.address, version: 6n, payload: genuine }, // relabelled with a higher version
+      { creator: curator.address, version: 5n, payload: await signPolicy(permissive, 5, forger) }, // signed by another key
       { creator: curator.address, version: 4n, payload: { ...genuine, policy: permissive } }, // altered after signing
       { creator: curator.address, version: 3n, payload: permissive }, // old unsigned format
       { creator: forger.address, version: 2n, payload: genuine }, // replayed under another creator
@@ -247,7 +248,7 @@ describe("sync over the real registry decoder", () => {
   });
 
   it("drops the dapp when its only policy is forged", async () => {
-    const reg = lyingArkiv([{ creator: curator.address, version: 1n, payload: await signPolicy(policy(), forger) }]);
+    const reg = lyingArkiv([{ creator: curator.address, version: 1n, payload: await signPolicy(policy(), 1, forger) }]);
     const next = await sync(reg, curator.address, emptySyncState(), NOW);
     expect(next.snapshot!.dapps).toEqual({});
   });

@@ -49,7 +49,12 @@ const policy: Policy = {
   recovery: { gateway: "TODO" },
 };
 
-const signed = await signPolicy(policy, curatorAccount);
+const signed = await signPolicy(policy, 1, curatorAccount);
+// The curator's genuine payload for each version the tests use.
+const genuineAt: Record<number, Uint8Array> = {};
+for (const v of [...Array.from({ length: 100 }, (_, i) => i + 1), 500]) {
+  genuineAt[v] = encodePayload(await signPolicy(policy, v, curatorAccount));
+}
 
 /** Answers each fetch with the next page, and records what each query asked for. */
 function mockReadClient(pages: unknown[][], payloads: Record<string, Uint8Array> = {}) {
@@ -223,8 +228,8 @@ describe("fetchPolicies", () => {
   const versionsFrom = async (rows: unknown[]) => (await fetchPolicies(mockReadClient([rows]).client, CURATOR)).map((p) => p.version);
 
   it("walks every page, scoped to the curator, highest version first", async () => {
-    const full = Array.from({ length: 100 }, (_, i) => entity(i + 1, BigInt(i + 1), encodePayload(signed)));
-    const { client, queries } = mockReadClient([full, [entity(200, 500n, encodePayload(signed))]]);
+    const full = Array.from({ length: 100 }, (_, i) => entity(i + 1, BigInt(i + 1), genuineAt[i + 1]!));
+    const { client, queries } = mockReadClient([full, [entity(200, 500n, genuineAt[500]!)]]);
 
     const policies = await fetchPolicies(client, CURATOR);
     expect(queries[0]?.createdBy).toBe(CURATOR);
@@ -235,37 +240,50 @@ describe("fetchPolicies", () => {
   });
 
   it("accepts a creator address in any case", async () => {
-    expect(await versionsFrom([entity(1, 1n, encodePayload(signed), READONLY, CURATOR.toLowerCase())])).toEqual([1]);
+    expect(await versionsFrom([entity(1, 1n, genuineAt[1]!, READONLY, CURATOR.toLowerCase())])).toEqual([1]);
   });
 
   it("drops an entity it can't decode, or with a mistyped version", async () => {
-    const bad = { ...entity(3, 3n, encodePayload(signed)), version: { type: "str", value: "3" } };
-    expect(await versionsFrom([entity(2, 2n, new Uint8Array([9])), bad, entity(1, 1n, encodePayload(signed))])).toEqual([1]);
+    const bad = { ...entity(3, 3n, genuineAt[3]!), version: { type: "str", value: "3" } };
+    expect(await versionsFrom([entity(2, 2n, new Uint8Array([9])), bad, entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
   });
 
   it("drops a policy that isn't readonly", async () => {
     const mutable = { readonly: false, permissionlessExtension: false };
-    expect(await versionsFrom([entity(2, 2n, encodePayload(signed), mutable), entity(1, 1n, encodePayload(signed))])).toEqual([1]);
+    expect(await versionsFrom([entity(2, 2n, genuineAt[2]!, mutable), entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
   });
 
   it("drops a policy signed by another key", async () => {
-    const forged = await signPolicy(policy, privateKeyToAccount(generatePrivateKey()));
-    expect(await versionsFrom([entity(2, 2n, encodePayload(forged)), entity(1, 1n, encodePayload(signed))])).toEqual([1]);
+    const forged = await signPolicy(policy, 2, privateKeyToAccount(generatePrivateKey()));
+    expect(await versionsFrom([entity(2, 2n, encodePayload(forged)), entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
   });
 
   it("drops a policy altered after signing", async () => {
-    const altered: SignedPolicy = { ...signed, policy: { ...policy, builders: [CURATOR] } };
-    expect(await versionsFrom([entity(2, 2n, encodePayload(altered)), entity(1, 1n, encodePayload(signed))])).toEqual([1]);
+    const altered: SignedPolicy = { ...signed, version: 2, policy: { ...policy, builders: [CURATOR] } };
+    expect(await versionsFrom([entity(2, 2n, encodePayload(altered)), entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
+  });
+
+  it("drops a genuine policy relabelled with a higher version attribute", async () => {
+    expect(await versionsFrom([entity(2, 9n, genuineAt[1]!), entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
+  });
+
+  it("drops a payload whose version differs from the attribute, even if its signature verifies", async () => {
+    expect(await versionsFrom([entity(3, 2n, genuineAt[3]!), entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
+  });
+
+  it("drops a payload whose version was edited to match a relabelled attribute", async () => {
+    const edited = encodePayload({ ...signed, version: 9 });
+    expect(await versionsFrom([entity(2, 9n, edited), entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
   });
 
   it("drops a correctly signed policy whose entity $creator is someone else", async () => {
     const other = privateKeyToAccount(generatePrivateKey()).address;
-    expect(await versionsFrom([entity(2, 2n, encodePayload(signed), READONLY, other), entity(1, 1n, encodePayload(signed))])).toEqual([1]);
+    expect(await versionsFrom([entity(2, 2n, genuineAt[2]!, READONLY, other), entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
   });
 
   it("drops an old unsigned payload, and one without a $creator", async () => {
-    const noCreator = { ...entity(3, 3n, encodePayload(signed)), $creator: undefined };
-    expect(await versionsFrom([noCreator, entity(2, 2n, encodePayload(policy)), entity(1, 1n, encodePayload(signed))])).toEqual([1]);
+    const noCreator = { ...entity(3, 3n, genuineAt[3]!), $creator: undefined };
+    expect(await versionsFrom([noCreator, entity(2, 2n, encodePayload(policy)), entity(1, 1n, genuineAt[1]!)])).toEqual([1]);
   });
 
   it("selects $creator so it can be checked", async () => {
@@ -353,9 +371,9 @@ describe("publish", () => {
     expect(createEntity).not.toHaveBeenCalled();
   });
 
-  it("creates a policy entity with a u64 version", async () => {
+  it("creates a policy entity whose u64 version is the signed version", async () => {
     const { client, createEntity } = mockWriteClient();
-    await publishPolicy(client, await signPolicy(policy, curatorAccount), 7);
+    await publishPolicy(client, await signPolicy(policy, 7, curatorAccount));
 
     const [schema, values, options] = createEntity.mock.calls[0] as [{ columns: Record<string, { type: string; isIndexed: boolean }> }, Record<string, any>, Record<string, unknown>];
     expect(values.project).toBe("unforged");
@@ -364,7 +382,7 @@ describe("publish", () => {
     expect(values.version).toMatchObject({ type: "u64", value: 7n });
     expect(schema.columns.version).toMatchObject({ type: "u64", isIndexed: true });
     expect(options.flags).toEqual(READONLY);
-    expect(decodePayload(values.payload)).toEqual({ policy, signature: expect.stringMatching(/^0x[0-9a-f]{130}$/) });
+    expect(decodePayload(values.payload)).toEqual({ policy, version: 7, signature: expect.stringMatching(/^0x[0-9a-f]{130}$/) });
   });
 });
 

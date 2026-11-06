@@ -37,7 +37,7 @@ async function clients(existing: { dapp: string; version: bigint }[] = []) {
       $key: `0x${(i + 1).toString(16).padStart(64, "0")}`,
       $creator: account.address,
       $creationFlags: { readonly: true, permissionlessExtension: false },
-      payload: { type: "bytes", value: bytesToHex(encodePayload(await signPolicy({ ...policy, dapp }, account))) },
+      payload: { type: "bytes", value: bytesToHex(encodePayload(await signPolicy({ ...policy, dapp }, Number(version), account))) },
       version: { type: "u64", value: version },
     })),
   );
@@ -90,6 +90,7 @@ describe("runPolicy", () => {
     const values = createEntity.mock.calls[0]?.[1] as { payload: Uint8Array };
     const signed = decodePayload<SignedPolicy>(values.payload);
     expect(signed.policy).toEqual(policy);
+    expect(signed.version).toBe(1);
     expect(await verifyPolicy(signed, account.address)).toBe(true);
   });
 
@@ -101,12 +102,15 @@ describe("runPolicy", () => {
   });
 
   it("uses previous + 1 for this dapp, ignoring other dapps", async () => {
-    const { value } = await clients([
+    const { value, createEntity } = await clients([
       { dapp: "demo", version: 4n },
       { dapp: "demo", version: 2n },
       { dapp: "other", version: 9n },
     ]);
     await expect(runPolicy(path, { env, clients: value })).resolves.toMatchObject({ version: 5 });
+    const values = createEntity.mock.calls[0]?.[1] as { version: unknown; payload: Uint8Array };
+    expect(values.version).toMatchObject({ value: 5n });
+    expect(decodePayload<SignedPolicy>(values.payload).version).toBe(5); // the version it signed
   });
 
   it("needs an access key to reach the registry", async () => {

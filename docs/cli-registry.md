@@ -8,7 +8,7 @@
 | `unforged attest <manifest.json> <recipe.yaml> [--toolchain-from-host]` | Build the Statement, sign the digest with `BUILDER_PRIVATE_KEY` (env var, never logged), write `attestation.json`. `toolchain.node`, `toolchain.os` and `builtAt` come from the `build-info.json` beside the manifest. Refuses if it describes another manifest, or if it is missing unless `--toolchain-from-host` records the current machine and time instead |
 | `unforged mirror-check <manifest.json> --gateway <url> --ref <name>` | Fetch every path in `manifest.files` through `gatewayUrl`, hash each body, and print `N/total match` plus up to 20 mismatches or fetch errors. Paths in `manifest.config` only need to answer 200, because their bytes are pinned in the policy. Exit 0 if all match, 3 otherwise. 8 requests at once, 30s timeout per file, one retry on a network error |
 | `unforged publish <attestation.json> <manifest.json> [--mirror-ref <name> --gateway <url>]` | Create the Arkiv `attestation` entity. With a mirror, run the mirror check first and refuse (exit 3) unless it passes, then store the ref in `swarm_ref`. Without one, `swarm_ref` is `none`. Idempotent: if an entity with the same `manifest_root` already exists for this creator, print it and exit 0. That entity is readonly, so a ref it doesn't already hold is not recorded, and publish warns on stderr |
-| `unforged policy <policy.json>` | Curator only. Sign the policy with `CURATOR_PRIVATE_KEY` (formats.md §4 `SignedPolicy`), verify the encoded payload, then create a `policy` entity with `version = previous + 1` |
+| `unforged policy <policy.json>` | Curator only. Pick `version = previous + 1`, sign the policy and that version with `CURATOR_PRIVATE_KEY` (formats.md §4 `SignedPolicy`), verify the encoded payload, then create the `policy` entity |
 | `unforged verify <url>` | Debug helper: fetch a live site's files listed in the accepted manifest and report matches. Not used by the extension |
 
 Pinned Node: the CLI checks `node --version` against `recipe.node` and refuses to build on a mismatch, unless `--allow-node-mismatch` is given (recorded in `predicate.toolchain`).
@@ -27,10 +27,10 @@ createReadClient(accessKey = ""): keyless by default, which is what the extensio
 createWriteClient(account, accessKey)
 rabdiPrepare(account, accessKey): Prepare // explicit nonce, gas and gasPrice for each write
 publishAttestation(walletClient, payload: { attestation, manifest }, attrs, prepare?): Promise<{ entityKey, txHash }>
-publishPolicy(walletClient, signed: SignedPolicy, version, prepare?): Promise<{ entityKey, txHash }>
+publishPolicy(walletClient, signed: SignedPolicy, prepare?) // version attribute = signed.version: Promise<{ entityKey, txHash }>
 // Reads take `source`: a client, or { accessKey? }. No key or "" means the public RPC. All retry HTTP 429 (see below).
 findAttestation(source, creator, manifestRoot): Promise<{ entityKey, swarmRef } | null> // publish's idempotency check
-fetchPolicies(source, curator): Promise<{ version: number; policy: Policy }[]> // highest version first; only rows whose $creator is the curator and whose signature verifies (verifyPolicy)
+fetchPolicies(source, curator): Promise<{ version: number; policy: Policy }[]> // highest version first; only rows whose $creator is the curator and whose signature verifies (verifyPolicy) and whose signed version equals the version attribute
 fetchAttestations(source, builder, dapp, skipKeys?: Set<string>): Promise<{ entityKey, creator, attestation, manifest, swarmRef }[]>
   // lists keys + attributes first, then fetches payloads only for keys not in skipKeys (incremental sync)
 // Mirrors. gateway: http or https URL ending in "/". ref: [a-z0-9][a-z0-9.-]*. path: starts with "/".

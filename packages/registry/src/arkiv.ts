@@ -155,23 +155,27 @@ export async function publishAttestation(
   return send(client, (c, tx) => c.createEntity(AttestationSchema, values, CREATE_OPTIONS, tx), prepare);
 }
 
-/** Publishes a curator-signed policy (formats.md §4). The caller signs; this only stores. */
-export async function publishPolicy(client: WriteClient, signed: SignedPolicy, version: number, prepare?: Prepare): Promise<Published> {
+/**
+ * Publishes a curator-signed policy (formats.md §4). The caller signs; this only stores. The
+ * version attribute is the signed version, so the two can't disagree.
+ */
+export async function publishPolicy(client: WriteClient, signed: SignedPolicy, prepare?: Prepare): Promise<Published> {
   const values = {
     project: PROJECT,
     entity_type: "policy",
     content_type: CONTENT_TYPE,
     dapp: signed.policy.dapp,
-    version: u64(BigInt(version)),
-    payload: encodeChecked({ policy: signed.policy, signature: signed.signature }),
+    version: u64(BigInt(signed.version)),
+    payload: encodeChecked({ policy: signed.policy, version: signed.version, signature: signed.signature }),
   };
   return send(client, (c, tx) => c.createEntity(PolicySchema, values, CREATE_OPTIONS, tx), prepare);
 }
 
 /**
  * Every readonly policy this curator created and signed, for all dapps, highest version first.
- * Arkiv is untrusted storage: a row counts only if its $creator is the curator and the payload's
- * signature recovers to the curator. Unsigned, mis-signed or malformed rows are dropped.
+ * Arkiv is untrusted storage: a row counts only if its $creator is the curator, the payload's
+ * signature over { policy, version } recovers to the curator, and that signed version is the
+ * entity's version attribute. Unsigned, mis-signed, relabelled or malformed rows are dropped.
  */
 export async function fetchPolicies(source: ReadSource, curator: Hex): Promise<{ version: number; policy: Policy }[]> {
   const client = readClientFor(source);
@@ -192,7 +196,8 @@ export async function fetchPolicies(source: ReadSource, curator: Hex): Promise<{
     if (typeof row.$creator !== "string" || !sameAddress(row.$creator, curator)) continue;
     const signed = tryDecode<SignedPolicy>(row.payload);
     if (signed === undefined || !(await verifyPolicy(signed, curator))) continue;
-    policies.push({ version: Number(row.version.value), policy: signed.policy });
+    if (BigInt(signed.version) !== row.version.value) continue; // verifyPolicy checked it is a safe integer
+    policies.push({ version: signed.version, policy: signed.policy });
   }
   return policies.sort((a, b) => b.version - a.version);
 }
