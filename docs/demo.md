@@ -36,6 +36,18 @@ A small script that wraps `window.ethereum.request` and, for `eth_sendTransactio
 | 2:30 | Study slide: 3 of 5 buildable dapps reproducible out of the box | it's real, today |
 | 2:50 | Close: "With this installed, Bybit's signers would have seen a red screen." | |
 
+## Live on Arkiv Rabdi
+
+The Lido policy ([`demo/policy.json`](../demo/policy.json)) requires 2 of 2 builders. Both have attested the same build:
+
+| What | Who | Entity / tx |
+|---|---|---|
+| Policy v1 | curator [`0x60422cB6937125250f829ed2d06B02AE2679dE09`](https://rabdi.explorer.arkiv.network/address/0x60422cB6937125250f829ed2d06B02AE2679dE09) | [`0x68842c8d…0fbfae66`](https://rabdi.explorer.arkiv.network/entity/0x68842c8d4e3b756f717ec4175307b43c2bdfa121550f8bc4587dc13d0fbfae66) |
+| Attestation 1 | builder 1, Docker [`0x723eE223ffAEEe90312E158E11FE75763262C5D3`](https://rabdi.explorer.arkiv.network/address/0x723eE223ffAEEe90312E158E11FE75763262C5D3) | [`0xaa51c3cc…ae7ef90d`](https://rabdi.explorer.arkiv.network/entity/0xaa51c3cc9f5f63838b7a55afd4a8f84980637dc8f411458883b9e323ae7ef90d) |
+| Attestation 2 | builder 2, GitHub Action [`0x9125c7F8A2001c3f0C902f4eEAEFC414Db339ACD`](https://rabdi.explorer.arkiv.network/address/0x9125c7F8A2001c3f0C902f4eEAEFC414Db339ACD) | [`0xd3782c81…621c1b25`](https://rabdi.explorer.arkiv.network/entity/0xd3782c8131b21e334e252c65b9293b4bec3c8848b9b4b29ea0cccddf621c1b25) ([tx](https://rabdi.explorer.arkiv.network/tx/0x02249a35548dbd834dce5cdcf55b2375687941a7c4ad6f5d2f14a458192c65ed)) |
+
+Both attestations carry `manifest_root` `13c7535a8b18401f36f176ebc74488ed5929e494b8d4e15f6a68a1bee9d26682`.
+
 ## Pre-recorded backup
 
 Record the full flow once it works (by hour 30). If the venue Wi-Fi or the testnet fails during judging, play the recording and run what still works locally. The Arkiv snapshot means verification itself works offline.
