@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { canonicalJSON, manifestRoot, statementDigest, type Hex, type Manifest, type Policy, type SignedAttestation, type Statement } from "@unforged/core";
+import { signPolicy } from "@unforged/core";
+import { encodePayload, fetchPolicies, type ReadClient } from "@unforged/registry";
+import { bytesToHex } from "viem";
 import { emptySyncState, errorText, sync, withFixture, type CachedEntry, type Registry, type SyncState } from "./sync.js";
 
 const CURATOR = "0x9373547bD5171EA42f2A63ED27E631FDCDc43E93";
@@ -206,5 +209,46 @@ describe("withFixture", () => {
     const synced = { syncedAt: NOW.toISOString(), dapps: {} };
     expect(withFixture(synced, null)).toBe(synced);
     expect(withFixture(null, null)).toBeNull();
+  });
+});
+
+describe("sync over the real registry decoder", () => {
+  const curator = privateKeyToAccount(generatePrivateKey());
+  const forger = privateKeyToAccount(generatePrivateKey());
+
+  /** An Arkiv node that ignores the creator filter and returns whatever rows it likes. */
+  function lyingArkiv(rows: { creator: Hex; version: bigint; payload: unknown }[]): Registry {
+    const entities = rows.map((r, i) => ({
+      $key: `0x${(i + 1).toString(16).padStart(64, "0")}`,
+      $creator: r.creator,
+      $creationFlags: { readonly: true, permissionlessExtension: false },
+      version: { type: "u64", value: r.version },
+      payload: { type: "bytes", value: bytesToHex(encodePayload(r.payload)) },
+    }));
+    const query = { where: () => query, createdBy: () => query, orderBy: () => query, limit: () => query, fetch: async () => ({ entities }) };
+    const client = { select: () => query, getEntity: async () => ({}) } as unknown as ReadClient;
+    return { fetchPolicies: (c) => fetchPolicies(client, c), fetchAttestations: async () => [] };
+  }
+
+  it("ignores forged, tampered, unsigned and wrong-creator policies and keeps the curator's", async () => {
+    const genuine = await signPolicy(policy({ threshold: 2 }), curator);
+    const permissive = policy({ threshold: 1, builders: [forger.address] });
+    const reg = lyingArkiv([
+      { creator: curator.address, version: 1n, payload: genuine },
+      { creator: curator.address, version: 5n, payload: await signPolicy(permissive, forger) }, // signed by another key
+      { creator: curator.address, version: 4n, payload: { ...genuine, policy: permissive } }, // altered after signing
+      { creator: curator.address, version: 3n, payload: permissive }, // old unsigned format
+      { creator: forger.address, version: 2n, payload: genuine }, // replayed under another creator
+    ]);
+
+    const next = await sync(reg, curator.address, emptySyncState(), NOW);
+    expect(next.lastError).toBeNull();
+    expect(next.snapshot!.dapps.demo).toMatchObject({ policyVersion: 1, policy: { threshold: 2 } });
+  });
+
+  it("drops the dapp when its only policy is forged", async () => {
+    const reg = lyingArkiv([{ creator: curator.address, version: 1n, payload: await signPolicy(policy(), forger) }]);
+    const next = await sync(reg, curator.address, emptySyncState(), NOW);
+    expect(next.snapshot!.dapps).toEqual({});
   });
 });
