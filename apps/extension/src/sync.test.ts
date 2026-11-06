@@ -6,7 +6,7 @@ import { encodePayload, fetchPolicies, type ReadClient } from "@unforged/registr
 import { bytesToHex } from "viem";
 import { emptySyncState, errorText, sync, withFixture, type CachedEntry, type Registry, type SyncState } from "./sync.js";
 
-const CURATOR = "0x9373547bD5171EA42f2A63ED27E631FDCDc43E93";
+const CURATOR = "0x60422cB6937125250f829ed2d06B02AE2679dE09";
 const NOW = new Date("2026-11-05T10:00:00Z");
 const REPO = "https://github.com/example/demo";
 const builders = [0, 1, 2].map(() => privateKeyToAccount(generatePrivateKey()));

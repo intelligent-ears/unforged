@@ -1,7 +1,7 @@
 // Fixed settings of the extension (extension.md "Background: sync").
 
 /** The curator whose policies the extension follows. Reads are always scoped to this address. */
-export const CURATOR_ADDRESS = "0x9373547bD5171EA42f2A63ED27E631FDCDc43E93";
+export const CURATOR_ADDRESS = "0x60422cB6937125250f829ed2d06B02AE2679dE09";
 
 export const SYNC_PERIOD_MINUTES = 10;
 
