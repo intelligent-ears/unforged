@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { AcceptedRelease, Policy } from "@unforged/core";
 import type { Snapshot } from "./decide.js";
-import { mirrorUrl, pathIn, siteFor, verifiedCopyUrl } from "./site.js";
+import { gatewayUrl } from "@unforged/registry";
+import { pathIn, siteFor, verifiedCopyUrl } from "./site.js";
 
 const ORIGIN = "http://localhost:8080";
 const GATEWAY = "https://mirror.example.org/unforged-mirror/";
@@ -89,12 +90,12 @@ describe("pathIn", () => {
   });
 });
 
-describe("mirrorUrl", () => {
-  it("follows gatewayUrl and allows http", () => {
-    expect(mirrorUrl(GATEWAY, "demo-2.0.0", "/earn")).toBe(`${GATEWAY}demo-2.0.0/earn`);
-    expect(mirrorUrl("http://localhost:9000/", "r", "/")).toBe("http://localhost:9000/r/");
-    expect(() => mirrorUrl(GATEWAY, "../x", "/")).toThrow();
-    expect(() => mirrorUrl(GATEWAY, "r", "/a/../b")).toThrow();
+describe("gatewayUrl as mirrors use it", () => {
+  it("builds folder URLs and allows an http gateway", () => {
+    expect(gatewayUrl(GATEWAY, "demo-2.0.0", "/earn")).toBe(`${GATEWAY}demo-2.0.0/earn`);
+    expect(gatewayUrl("http://localhost:9000/", "r", "/")).toBe("http://localhost:9000/r/");
+    expect(() => gatewayUrl(GATEWAY, "../x", "/")).toThrow();
+    expect(() => gatewayUrl(GATEWAY, "r", "/a/../b")).toThrow();
   });
 });
 

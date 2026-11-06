@@ -14,21 +14,11 @@ export interface Site {
   mirror?: AcceptedRelease;
 }
 
-/**
- * gatewayUrl with its rules, except that the gateway may also be http (formats.md §4):
- * integrity comes from the manifest hashes, not the transport.
- */
-export function mirrorUrl(gateway: string, ref: string, path: string): string {
-  const http = gateway.startsWith("http://");
-  const url = gatewayUrl(http ? `https://${gateway.slice("http://".length)}` : gateway, ref, path);
-  return http ? `http://${url.slice("https://".length)}` : url;
-}
-
 /** "<gateway><ref>/", or undefined when recovery is off ("TODO", missing) or the values are unsafe. */
 export function mirrorBase(gateway: string | undefined, ref: string): string | undefined {
   if (!gateway || gateway === "TODO") return undefined;
   try {
-    return mirrorUrl(gateway, ref, "/");
+    return gatewayUrl(gateway, ref, "/");
   } catch {
     return undefined;
   }
@@ -82,8 +72,8 @@ export function verifiedCopyUrl(
   const ref = release?.swarmRefs[0];
   if (ref === undefined || mirrorBase(gateway, ref) === undefined) return { error: "no verified copy of this dapp is mirrored" };
   try {
-    return { url: mirrorUrl(gateway, ref, path) };
+    return { url: gatewayUrl(gateway, ref, path) };
   } catch {
-    return { url: mirrorUrl(gateway, ref, "/") }; // the path can't be used safely; open the start page
+    return { url: gatewayUrl(gateway, ref, "/") }; // the path can't be used safely; open the start page
   }
 }
