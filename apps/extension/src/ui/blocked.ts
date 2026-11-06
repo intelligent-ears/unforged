@@ -1,6 +1,7 @@
 // Blocked page: explains what the background blocked in tab ?tab=<id>. The red header is in the
 // HTML, so it stays up unless the background reports that nothing is blocked.
-import type { Blocked, SnapshotSummary, TabState } from "@unforged/core";
+import type { Blocked, TabState } from "@unforged/core";
+import type { SyncSummary } from "../summary.js";
 import { byId, el, showMockNotice } from "./dom.js";
 import {
   blockedFileLabel,
@@ -88,7 +89,7 @@ function setUpCopyButton(source: StateSource, tabId: number | undefined, availab
 
 async function load(source: StateSource, tabId: number | undefined): Promise<void> {
   const [state, summary] = await Promise.allSettled([source.getTabState(tabId), source.getSnapshotSummary()]);
-  const snapshot: SnapshotSummary | undefined = summary.status === "fulfilled" ? summary.value : undefined;
+  const snapshot: SyncSummary | undefined = summary.status === "fulfilled" ? summary.value : undefined;
   if (state.status === "rejected") {
     showDetailsUnavailable(state.reason);
     setUpCopyButton(source, tabId, false);

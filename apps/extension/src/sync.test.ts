@@ -130,7 +130,7 @@ describe("sync", () => {
     const leaky: Registry = { ...failing, fetchPolicies: () => Promise.reject(new Error("failed: https://rpc/k3y-abc")) };
     expect((await sync(leaky, CURATOR, good, NOW, "k3y-abc")).lastError).not.toContain("k3y-abc");
 
-    const attestationsDown: Registry = { ...registry([{ version: 1, policy: policy() }], []).reg, fetchAttestations: failing.fetchPolicies };
+    const attestationsDown: Registry = { ...registry([{ version: 1, policy: policy() }], []).reg, fetchAttestations: () => Promise.reject(new Error("HTTP 429")) };
     expect((await sync(attestationsDown, CURATOR, good, NOW)).snapshot).toEqual(good.snapshot);
   });
 

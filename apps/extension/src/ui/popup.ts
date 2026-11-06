@@ -1,5 +1,6 @@
 // Toolbar popup: shows what the background reports about the active tab.
-import type { SnapshotSummary, TabState, Verdict } from "@unforged/core";
+import type { TabState, Verdict } from "@unforged/core";
+import type { SyncSummary } from "../summary.js";
 import { byId, detailList, el, showMockNotice } from "./dom.js";
 import {
   blockedFileLabel,
@@ -30,7 +31,7 @@ function buildersDetail(verdict: Verdict, total: number | undefined): HTMLElemen
   return el("span", "", el("div", "", buildersCount(verdict.builders, total)), ...addresses);
 }
 
-function stateDetails(state: TabState, summary: SnapshotSummary | undefined): HTMLElement {
+function stateDetails(state: TabState, summary: SyncSummary | undefined): HTMLElement {
   const verdict = state.verdict;
   const dapp = dappOf(state);
   const release = state.release ?? ("release" in verdict ? verdict.release : undefined);
@@ -59,9 +60,28 @@ function configValues(values: Record<string, unknown>): HTMLElement {
   return el("section", "", el("h2", "", "Accepted config"), list);
 }
 
-function syncLine(summary: SnapshotSummary | undefined): HTMLElement {
+/** Last sync time, why the last sync failed (if it did), and "Sync now". */
+function syncSection(source: StateSource, summary: SyncSummary | undefined, root: HTMLElement): HTMLElement {
   const when = summary ? relativeTime(summary.syncedAt) : "unavailable";
-  return el("p", "sync", `Last sync: ${when}`);
+  const section = el("section", "sync", el("p", "", `Last sync: ${when}`));
+  if (summary?.lastError) section.append(el("p", "sync-error", `Last sync failed: ${summary.lastError}`));
+  if (source.mock) return section;
+
+  const button = el("button", "", "Sync now");
+  button.type = "button";
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    button.textContent = "Syncing…";
+    source
+      .syncNow()
+      .then(async (reply) => {
+        await render(source, root);
+        if ("error" in reply) root.append(el("p", "note", reply.error));
+      })
+      .catch((error: unknown) => root.append(el("p", "note", `Couldn't sync: ${String(error)}.`)));
+  });
+  section.append(button);
+  return section;
 }
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
@@ -102,7 +122,7 @@ async function render(source: StateSource, root: HTMLElement): Promise<void> {
 
   if (state.status === "rejected") {
     showUnavailable(root, state.reason);
-    root.append(syncLine(snapshot));
+    root.append(syncSection(source, snapshot, root));
     return;
   }
 
@@ -114,7 +134,7 @@ async function render(source: StateSource, root: HTMLElement): Promise<void> {
     root.append(seeDetailsButton(source, tab, root));
   }
   if (value.configValues && Object.keys(value.configValues).length > 0) root.append(configValues(value.configValues));
-  root.append(syncLine(snapshot));
+  root.append(syncSection(source, snapshot, root));
 }
 
 async function main(): Promise<void> {

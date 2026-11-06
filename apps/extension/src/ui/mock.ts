@@ -1,6 +1,7 @@
 // Built-in fixtures for ?mock=<level>, so every state can be viewed without a dapp.
 // The addresses and hashes are made up.
-import type { Blocked, SnapshotSummary, TabState } from "@unforged/core";
+import type { Blocked, TabState } from "@unforged/core";
+import type { SyncSummary } from "../summary.js";
 import type { Level } from "./format.js";
 
 const DAPP = "lido-staking-widget";
@@ -66,8 +67,9 @@ export const MOCK_STATES: Record<Level, TabState> = {
   unsupported: { verdict: { level: "unsupported" }, checked: 0, blocked: [] },
 };
 
-export function mockSummary(now: number = Date.now()): SnapshotSummary {
+export function mockSummary(now: number = Date.now()): SyncSummary {
   return {
+    lastError: null,
     syncedAt: new Date(now - 3 * 60_000).toISOString(),
     dapps: [
       {

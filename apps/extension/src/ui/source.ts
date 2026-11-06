@@ -1,13 +1,16 @@
 // The UI's only way to get state: the background's messages, or fixtures under ?mock=<level>.
-import type { SnapshotSummary, TabState } from "@unforged/core";
+import type { TabState } from "@unforged/core";
+import type { SyncSummary } from "../summary.js";
 import { parseMock } from "./format.js";
 import { MOCK_STATES, mockSummary } from "./mock.js";
 
 export interface StateSource {
   mock: boolean;
   getTabState(tabId: number | undefined): Promise<TabState>;
-  getSnapshotSummary(): Promise<SnapshotSummary>;
+  getSnapshotSummary(): Promise<SyncSummary>;
   openVerifiedCopy(tabId: number | undefined): Promise<unknown>;
+  /** Asks the background to sync now. Resolves when it finished, or with why it didn't run. */
+  syncNow(): Promise<{ ok: true } | { error: string }>;
 }
 
 function requireTabId(tabId: number | undefined): number {
@@ -26,12 +29,16 @@ const background: StateSource = {
     return state;
   },
   async getSnapshotSummary() {
-    const summary = (await browser.runtime.sendMessage({ type: "getSnapshotSummary" })) as SnapshotSummary | undefined;
+    const summary = (await browser.runtime.sendMessage({ type: "getSnapshotSummary" })) as SyncSummary | undefined;
     if (!summary?.dapps) throw new Error("the background did not report a snapshot");
     return summary;
   },
   openVerifiedCopy(tabId) {
     return browser.runtime.sendMessage({ type: "openVerifiedCopy", tabId: requireTabId(tabId) });
+  },
+  async syncNow() {
+    const reply = (await browser.runtime.sendMessage({ type: "syncNow" })) as { ok: true } | { error: string } | undefined;
+    return reply ?? { error: "the background did not answer" };
   },
 };
 
@@ -45,5 +52,6 @@ export function stateSource(search: string = location.search): StateSource {
     openVerifiedCopy: async () => {
       throw new Error("nothing to open in mock mode");
     },
+    syncNow: async () => ({ error: "no sync in mock mode" }),
   };
 }

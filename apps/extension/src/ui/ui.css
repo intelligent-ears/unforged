@@ -258,3 +258,26 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
 }
+
+.options main {
+  max-width: 32rem;
+  padding: 1rem;
+}
+
+.options label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.options input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+}
+
+.sync-error {
+  color: #c62828;
+  font-size: 0.85em;
+}

@@ -113,5 +113,6 @@ export function dappOf({ dapp, verdict }: TabState): string | undefined {
 /** Whether openVerifiedCopy has anything to open: a release of this dapp mirrored on Swarm. */
 export function verifiedCopyAvailable(summary: SnapshotSummary | undefined, dapp: string | undefined): boolean {
   const entry = summary?.dapps.find((d) => d.dapp === dapp);
-  return entry?.releases.some((r) => r.swarmRefs.length > 0) ?? false;
+  if (!entry?.gateway || entry.gateway === "TODO") return false; // recovery is off for this dapp
+  return entry.releases.some((r) => r.swarmRefs.length > 0);
 }

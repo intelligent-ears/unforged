@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Unforged options</title>
+    <link rel="stylesheet" href="./ui/ui.css" />
+  </head>
+  <body class="options">
+    <main>
+      <form id="access-key-form">
+        <label for="access-key">Arkiv access key</label>
+        <input id="access-key" type="password" autocomplete="off" spellcheck="false" />
+        <p class="note">
+          Optional. Sync reads the public registry on Arkiv; a key only raises its rate limit. A saved key
+          is never shown again. Save an empty field to remove it and use the public endpoint.
+        </p>
+        <div class="actions"><button type="submit">Save</button></div>
+        <p id="key-status" class="note" role="status"></p>
+      </form>
+    </main>
+    <script type="module" src="./ui/options.ts"></script>
+  </body>
+</html>

@@ -172,7 +172,7 @@ describe("page parameters", () => {
 });
 
 describe("verifiedCopyAvailable", () => {
-  const summary = (swarmRefs: string[]): SnapshotSummary => ({
+  const summary = (swarmRefs: string[], gateway = "https://gateway.example/bzz/"): SnapshotSummary => ({
     syncedAt: null,
     dapps: [
       {
@@ -180,7 +180,7 @@ describe("verifiedCopyAvailable", () => {
         policyVersion: 1,
         buildersTotal: 3,
         threshold: 2,
-        gateway: "https://gateway.example/bzz/",
+        gateway,
         releases: [{ release: "1", commit: "abc", builders: [], swarmRefs }],
       },
     ],
@@ -192,5 +192,10 @@ describe("verifiedCopyAvailable", () => {
     expect(verifiedCopyAvailable(summary(["ref"]), "other")).toBe(false);
     expect(verifiedCopyAvailable(summary(["ref"]), undefined)).toBe(false);
     expect(verifiedCopyAvailable(undefined, "lido")).toBe(false);
+  });
+
+  it("needs a recovery gateway", () => {
+    expect(verifiedCopyAvailable(summary(["ref"], "TODO"), "lido")).toBe(false);
+    expect(verifiedCopyAvailable(summary(["ref"], ""), "lido")).toBe(false);
   });
 });
