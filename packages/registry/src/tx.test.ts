@@ -46,7 +46,7 @@ function fakeRpc(overrides: Record<string, unknown> = {}) {
   return { rpc: { request }, methods };
 }
 
-const writePolicy = (client: WriteClient) => publishPolicy(client, policy, 1);
+const writePolicy = (client: WriteClient) => publishPolicy(client, { policy, signature: `0x${"11".repeat(65)}` }, 1);
 
 describe("estimateGas", () => {
   it("returns the node's estimate of the exact operation through the real SDK", async () => {

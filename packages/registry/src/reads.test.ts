@@ -22,7 +22,7 @@ describe("schemas", () => {
 
   const anything = {} as never;
   const attrs = { dapp: "d", release: "r", commit: "c", manifest_root: "m", recipe_digest: "g", swarm_ref: "none" };
-  const policy = { dapp: "d" } as never;
+  const policy = { policy: { dapp: "d" }, signature: "0x" } as never;
 
   it("has one schema per entity kind, with the formats.md attributes", async () => {
     const attestation = await schemaUsedBy((c) => publishAttestation(c, anything, attrs));
