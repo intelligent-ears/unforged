@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { countsAsEvidence, isBlockedPage, keepsTabState, showsBlockedPage } from "./navigation.js";
 
-const POLICY = ["http://localhost:8080"];
+const POLICY = (url: string) => url.startsWith("http://localhost:8080/");
 const BLOCKED = "moz-extension://abc/blocked.html";
 
 describe("keepsTabState", () => {

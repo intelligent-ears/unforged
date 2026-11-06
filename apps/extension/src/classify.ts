@@ -1,5 +1,6 @@
 // Pure request classification: which tab a request belongs to, and whether its body must be checked.
 // No browser APIs here, so it is unit-tested directly.
+import type { Site } from "./site.js";
 
 /** The subset of webRequest details that classification reads. */
 export interface RequestInfo {
@@ -11,9 +12,20 @@ export interface RequestInfo {
   originUrl?: string;
 }
 
+/** What the background recorded for a tab at its last top-level navigation. */
+export interface RecordedTab {
+  origin: string | undefined;
+  site: Site | undefined;
+}
+
+/** The site a top-level document URL belongs to (site.ts siteFor over the current snapshot). */
+export type SiteAt = (url: string | undefined) => Site | undefined;
+
 export interface Classification {
   /** Top-level origin of the tab, or undefined if it can't be determined. */
   tabOrigin: string | undefined;
+  /** The dapp site the tab's document came from, if any. */
+  site: Site | undefined;
   /** True if the response body must be buffered and checked. */
   filter: boolean;
 }
@@ -55,13 +67,20 @@ export function isCodeRequest(details: RequestInfo): boolean {
   return details.type === "xmlhttprequest" && pathEndsInJs(details.url);
 }
 
-export function classify(
-  details: RequestInfo,
-  recordedOrigin: string | undefined,
-  policyOrigins: readonly string[],
-): Classification {
-  const tabOrigin = tabOriginFor(details, recordedOrigin);
-  const inPolicy = tabOrigin !== undefined && policyOrigins.includes(tabOrigin);
-  const filter = details.tabId >= 0 && inPolicy && isCodeRequest(details);
-  return { tabOrigin, filter };
+/**
+ * main_frame finds its site from its URL. Everything else keeps the site recorded for the tab: on
+ * a mirror the site is a folder, and a URL change after the document loaded (pushState) must not
+ * move the tab out of it. With nothing recorded, the request's document stands in.
+ */
+export function siteForRequest(details: RequestInfo, recorded: RecordedTab | undefined, siteAt: SiteAt): Site | undefined {
+  if (details.type === "main_frame") return siteAt(details.url);
+  if (recorded?.origin !== undefined) return recorded.site;
+  return siteAt(details.documentUrl) ?? siteAt(details.originUrl);
+}
+
+export function classify(details: RequestInfo, recorded: RecordedTab | undefined, siteAt: SiteAt): Classification {
+  const tabOrigin = tabOriginFor(details, recorded?.origin);
+  const site = siteForRequest(details, recorded, siteAt);
+  const filter = details.tabId >= 0 && site !== undefined && isCodeRequest(details);
+  return { tabOrigin, site, filter };
 }

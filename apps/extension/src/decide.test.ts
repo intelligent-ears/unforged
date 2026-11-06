@@ -4,6 +4,7 @@ import { checkConfig, sha256Hex, type AcceptedRelease, type Manifest, type Polic
 import lido from "../fixtures/lido-0.161.0.manifest.json";
 import fixtureSnapshot from "../fixtures/snapshot.json";
 import { decide, newTab, servedPath, type Snapshot } from "./decide.js";
+import { siteFor } from "./site.js";
 
 const ORIGIN = "http://localhost:8080";
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -223,5 +224,57 @@ describe("fixture snapshot config pin", () => {
     const rule = lido.config["/runtime/window-env.js"] as Manifest["config"][string];
     expect(checkConfig(rule, flipped).ok).toBe(true);
     expect((await decide(snap, lidoTab(), envReq(flipped))).blocked?.reason).toBe("config-invalid");
+  });
+});
+
+describe("recovery mirror", () => {
+  const GATEWAY = "http://mirror.example.org/m/";
+  const base = (ref: string) => `${GATEWAY}${ref}/`;
+
+  async function mirrored(): Promise<Snapshot> {
+    const snap = await snapshot();
+    const entry = snap.dapps.demo!;
+    entry.policy.recovery.gateway = GATEWAY;
+    entry.releases[0]!.swarmRefs = ["demo-2"];
+    entry.releases[1]!.swarmRefs = ["demo-1"];
+    return snap;
+  }
+
+  function mirrorReq(snap: Snapshot, ref: string, path: string, body: string, type = "script", url = base(ref) + path.slice(1)) {
+    const site = siteFor(snap, base(ref))!;
+    return { url, type, tabOrigin: "http://mirror.example.org", site, body: enc(body) };
+  }
+
+  it("locks the tab to the mirror's release and checks files against it", async () => {
+    const snap = await mirrored();
+    const tab = newTab();
+    expect((await decide(snap, tab, mirrorReq(snap, "demo-2", "/", INDEX, "main_frame"))).allow).toBe(true);
+    expect(tab.state.release).toBe("2.0.0");
+    expect((await decide(snap, tab, mirrorReq(snap, "demo-2", "/app/chunk.js", CHUNK))).allow).toBe(true);
+    expect((await decide(snap, tab, mirrorReq(snap, "demo-2", "/runtime/window-env.js", ENV_OK))).allow).toBe(true);
+    expect(tab.state.verdict).toMatchObject({ level: "reproduced", release: "2.0.0" });
+  });
+
+  it("won't lock a mirror folder to another release's document", async () => {
+    const snap = await mirrored();
+    const tab = newTab();
+    const d = await decide(snap, tab, mirrorReq(snap, "demo-2", "/", OLD_INDEX, "main_frame"));
+    expect(d.blocked).toMatchObject({ reason: "hash-mismatch" });
+    expect(tab.lock).toBeUndefined();
+  });
+
+  it("blocks a tampered file, a file from another folder and a flipped config", async () => {
+    const snap = await mirrored();
+    const tab = newTab();
+    await decide(snap, tab, mirrorReq(snap, "demo-2", "/", INDEX, "main_frame"));
+    expect((await decide(snap, tab, mirrorReq(snap, "demo-2", "/app/chunk.js", EVIL))).blocked?.reason).toBe("hash-mismatch");
+    expect((await decide(snap, tab, mirrorReq(snap, "demo-2", "/app/chunk.js", OLD_CHUNK))).blocked?.reason).toBe("release-mixed");
+    expect((await decide(snap, tab, mirrorReq(snap, "demo-2", "/runtime/window-env.js", ENV_FLIPPED))).blocked?.reason).toBe(
+      "config-invalid",
+    );
+    const outside = mirrorReq(snap, "demo-2", "/", CHUNK, "script", `${base("demo-1")}app/chunk.js`);
+    expect((await decide(snap, tab, outside)).blocked?.reason).toBe("third-party");
+    const hostRoot = mirrorReq(snap, "demo-2", "/", CHUNK, "script", "http://mirror.example.org/app/chunk.js");
+    expect((await decide(snap, tab, hostRoot)).blocked?.reason).toBe("third-party");
   });
 });
