@@ -1,0 +1,16 @@
+{
+  "dapp": "lido-staking-widget",
+  "origins": ["http://localhost:8080"],
+  "repo": "https://github.com/lidofinance/ethereum-staking-widget",
+  "builders": [
+    "0x723eE223ffAEEe90312E158E11FE75763262C5D3",
+    "0x9125c7F8A2001c3f0C902f4eEAEFC414Db339ACD"
+  ],
+  "threshold": 2,
+  "acceptLatest": 3,
+  "thirdParty": {},
+  "recovery": { "gateway": "http://intelears.me/unforged-mirror/" },
+  "configPins": {
+    "/runtime/window-env.js": "1dc276f81fab369bcab6cd53b511e4090897b27501adae5b5b5cd9fd46489537"
+  }
+}
