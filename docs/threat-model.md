@@ -2,7 +2,7 @@
 
 What Unforged protects, who it protects against, what it relies on, and where it is weakest. It describes the design in `architecture.md`, `formats.md` and `extension.md`.
 
-**Status on `main`:** enforcement runs, but against a snapshot bundled with the extension. Sync from Arkiv, the hardcoded curator address and verification of the recovery origin arrive with M9. Statements about those parts describe the spec, not running code.
+**Status on `main`:** M9 has merged. The extension syncs policies and attestations from Arkiv every 10 minutes, the curator address is hardcoded (`apps/extension/src/config.ts`), and recovery-mirror files are verified like the dapp's own. These are running code. The bundled snapshot exists only in `UNFORGED_FIXTURE=1` demo builds.
 
 ## Assets
 
@@ -73,6 +73,10 @@ Ranked by how little an attacker needs to exploit each one.
 
 These came up while writing this document and are not ranked above.
 
-- **Policies are not signed in their payload.** Attestations carry a signature the extension checks itself. A policy is accepted because the Arkiv RPC returned it for `.createdBy(curator)` (`fetchPolicies` in `packages/registry/src/arkiv.ts`). A malicious RPC endpoint could therefore supply a forged policy, with the same effect as a stolen curator key. Possible fix: have the curator sign the payload. That changes the format, and `types.ts` is frozen.
 - **A stale snapshot keeps working.** This is deliberate, so verdicts survive going offline, but the spec sets no maximum age. If sync is blocked, a removed builder or a revoked release stays accepted for that user.
+- **A malicious RPC can still withhold or roll back policies.** Signatures stop forged policies, not missing ones. The `version` attribute is outside the signature, so an RPC that hides newer entities, or relabels an older signed policy with a higher version, can serve a superseded policy the curator really signed. A dapp whose every policy is withheld simply isn't listed, so its origins are not checked.
 - **Some code may not be checked.** Only code request types and `xmlhttprequest` paths ending in `.js` are filtered (`classify.ts`), so WebAssembly or scripts fetched from other paths pass through. Requests with no tab (`tabId` -1) are also not filtered, and these may include service worker scripts. Service worker cases are on the hardening list and not yet tested.
+
+## Fixed
+
+- **Policies are not signed in their payload.** *Fixed.* A policy payload is now `{ policy, signature }`, where `signature` is the curator's EIP-191 signature over `sha256(canonicalJSON(policy))` (formats.md §4, `verifyPolicy` in `packages/core/src/signed-policy.ts`). `fetchPolicies` drops a row unless the signature recovers to the configured curator and the entity's `$creator` is that same address, so unsigned, mis-signed or tampered payloads are ignored and Arkiv is untrusted storage. `unforged policy` signs with `CURATOR_PRIVATE_KEY` and verifies its own encoded payload before sending. Policies published in the old unsigned format are no longer read and must be republished. The Policy type in `types.ts` is unchanged.
