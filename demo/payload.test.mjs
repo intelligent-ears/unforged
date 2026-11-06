@@ -28,6 +28,7 @@ function makeProvider(chainHex = CHAIN_HEX) {
 function load(code, { origin = CONFIG.origin, ethereum = undefined } = {}) {
   const listeners = new Map();
   const logs = [];
+  const posted = [];
   const window = {
     ethereum,
     location: { origin },
@@ -38,6 +39,10 @@ function load(code, { origin = CONFIG.origin, ethereum = undefined } = {}) {
     dispatchEvent(ev) {
       for (const cb of listeners.get(ev.type) ?? []) cb(ev);
       return true;
+    },
+    // The real content-script sink. The payload wraps this and forwards here.
+    postMessage(message, targetOrigin) {
+      posted.push({ message, targetOrigin });
     },
   };
   const sandbox = {
@@ -51,7 +56,21 @@ function load(code, { origin = CONFIG.origin, ethereum = undefined } = {}) {
     const ev = { type: 'eip6963:announceProvider', detail: { provider } };
     for (const cb of listeners.get('eip6963:announceProvider') ?? []) cb(ev);
   }
-  return { logs, announce };
+  return { logs, announce, window, posted };
+}
+
+const CAIP_SCOPE = `eip155:${CONFIG.chainId}`; // eip155:560048
+
+// A MetaMask multichain message: a wallet_invokeMethod wrapping a scoped inner request,
+// nested under the content-script stream the way MetaMask posts it.
+function multichainMessage(scope, request) {
+  return {
+    target: 'metamask-contentscript',
+    data: {
+      name: 'metamask-multichain-provider',
+      data: { jsonrpc: '2.0', id: 1, method: 'wallet_invokeMethod', params: { scope, request } },
+    },
+  };
 }
 
 function tx(to = '0xC0ffEE0000000000000000000000000000000000') {
@@ -115,4 +134,55 @@ test('never wraps the same provider twice', () => {
   announce(provider); // same object, announced via 6963
   announce(provider);
   assert.equal(provider.request, afterFirst);
+});
+
+// --- MetaMask multichain channel (window.postMessage) ---
+
+test('rewrites a multichain eth_sendTransaction on the demo scope at the demo origin', () => {
+  const { window, logs, posted } = load(PAYLOAD);
+  const request = { method: 'eth_sendTransaction', params: [tx()] };
+  const message = multichainMessage(CAIP_SCOPE, request);
+  window.postMessage(message, CONFIG.origin);
+  assert.equal(request.params[0].to, CONFIG.attackerAddress);
+  assert.ok(logs.some((l) => l.includes('[unforged demo payload]')));
+  assert.equal(posted.length, 1); // still forwarded, once
+  assert.equal(posted[0].message, message);
+});
+
+test('rewrites every call of a multichain wallet_sendCalls on the demo scope', () => {
+  const { window } = load(PAYLOAD);
+  const a = tx('0xaaaA000000000000000000000000000000000000');
+  const b = tx('0xbBBb000000000000000000000000000000000000');
+  const request = { method: 'wallet_sendCalls', params: [{ from: a.from, calls: [a, b] }] };
+  window.postMessage(multichainMessage(CAIP_SCOPE, request), CONFIG.origin);
+  assert.equal(a.to, CONFIG.attackerAddress);
+  assert.equal(b.to, CONFIG.attackerAddress);
+});
+
+test('leaves a multichain message on another chain (eip155:1) untouched', () => {
+  const { window, posted } = load(PAYLOAD);
+  const request = { method: 'eth_sendTransaction', params: [tx()] };
+  const before = request.params[0].to;
+  window.postMessage(multichainMessage('eip155:1', request), CONFIG.origin);
+  assert.equal(request.params[0].to, before);
+  assert.equal(posted.length, 1);
+});
+
+test('leaves a multichain message on another origin untouched', () => {
+  const { window, posted } = load(PAYLOAD, { origin: 'http://not-the-demo.example' });
+  const request = { method: 'eth_sendTransaction', params: [tx()] };
+  const before = request.params[0].to;
+  window.postMessage(multichainMessage(CAIP_SCOPE, request), 'http://not-the-demo.example');
+  assert.equal(request.params[0].to, before);
+  assert.equal(posted.length, 1);
+});
+
+test('passes unrelated postMessages through unchanged', () => {
+  const { window, posted } = load(PAYLOAD);
+  const unrelated = { type: 'hello', payload: { to: tx().to } };
+  const before = unrelated.payload.to;
+  window.postMessage(unrelated, CONFIG.origin);
+  assert.equal(unrelated.payload.to, before);
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].message, unrelated);
 });
