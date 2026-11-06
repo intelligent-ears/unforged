@@ -2,10 +2,17 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodePayload, encodePayload, type ReadClient, type WriteClient } from "@unforged/registry";
+import { signPolicy, verifyPolicy, type SignedPolicy } from "@unforged/core";
 import { bytesToHex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runPolicy } from "./policy.js";
+
+// The CLI's own self-check can be made to fail; everything else uses the real verifyPolicy.
+vi.mock("@unforged/core", async (original) => {
+  const core = await original<typeof import("@unforged/core")>();
+  return { ...core, verifyPolicy: vi.fn(core.verifyPolicy) };
+});
 
 const key = generatePrivateKey();
 const account = privateKeyToAccount(key);
@@ -24,13 +31,16 @@ const policy = {
   recovery: { gateway: "TODO" },
 };
 
-function clients(existing: { dapp: string; version: bigint }[] = []) {
-  const entities = existing.map(({ dapp, version }, i) => ({
-    $key: `0x${(i + 1).toString(16).padStart(64, "0")}`,
-    $creationFlags: { readonly: true, permissionlessExtension: false },
-    payload: { type: "bytes", value: bytesToHex(encodePayload({ ...policy, dapp })) },
-    version: { type: "u64", value: version },
-  }));
+async function clients(existing: { dapp: string; version: bigint }[] = []) {
+  const entities = await Promise.all(
+    existing.map(async ({ dapp, version }, i) => ({
+      $key: `0x${(i + 1).toString(16).padStart(64, "0")}`,
+      $creator: account.address,
+      $creationFlags: { readonly: true, permissionlessExtension: false },
+      payload: { type: "bytes", value: bytesToHex(encodePayload(await signPolicy({ ...policy, dapp }, account))) },
+      version: { type: "u64", value: version },
+    })),
+  );
   const query = {
     where: () => query,
     createdBy: vi.fn(() => query),
@@ -61,7 +71,7 @@ beforeEach(() => {
 
 describe("runPolicy", () => {
   it("starts at version 1, reading only this curator's policies", async () => {
-    const { value, createEntity, query } = clients();
+    const { value, createEntity, query } = await clients();
     await expect(runPolicy(path, { env, clients: value })).resolves.toEqual({
       entityKey: "0xnew",
       txHash: "0xtx",
@@ -74,8 +84,24 @@ describe("runPolicy", () => {
     expect(createEntity.mock.calls[0]?.[3]).toEqual(TX_PARAMS);
   });
 
+  it("publishes the policy signed by the curator key", async () => {
+    const { value, createEntity } = await clients();
+    await runPolicy(path, { env, clients: value });
+    const values = createEntity.mock.calls[0]?.[1] as { payload: Uint8Array };
+    const signed = decodePayload<SignedPolicy>(values.payload);
+    expect(signed.policy).toEqual(policy);
+    expect(await verifyPolicy(signed, account.address)).toBe(true);
+  });
+
+  it("refuses to publish when its own signed output does not verify", async () => {
+    vi.mocked(verifyPolicy).mockResolvedValueOnce(false);
+    const { value, createEntity } = await clients();
+    await expect(runPolicy(path, { env, clients: value })).rejects.toThrow(/does not verify/);
+    expect(createEntity).not.toHaveBeenCalled();
+  });
+
   it("uses previous + 1 for this dapp, ignoring other dapps", async () => {
-    const { value } = clients([
+    const { value } = await clients([
       { dapp: "demo", version: 4n },
       { dapp: "demo", version: 2n },
       { dapp: "other", version: 9n },
@@ -88,25 +114,25 @@ describe("runPolicy", () => {
   });
 
   it("does not accept the builder key", async () => {
-    const { value } = clients();
+    const { value } = await clients();
     await expect(runPolicy(path, { env: { BUILDER_PRIVATE_KEY: key }, clients: value })).rejects.toThrow(/CURATOR_PRIVATE_KEY is not set/);
   });
 
   it("normalizes builder addresses to checksummed form", async () => {
     write({ ...policy, builders: builders.map((b) => b.toLowerCase()) });
-    const { value, createEntity } = clients();
+    const { value, createEntity } = await clients();
     await runPolicy(path, { env, clients: value });
     const values = createEntity.mock.calls[0]?.[1] as { payload: Uint8Array };
-    expect(decodePayload<{ builders: string[] }>(values.payload).builders).toEqual(builders);
+    expect(decodePayload<SignedPolicy>(values.payload).policy.builders).toEqual(builders);
   });
 
   it("publishes configPins as given", async () => {
     const configPins = { "/runtime/window-env.js": "1dc276f81fab369bcab6cd53b511e4090897b27501adae5b5b5cd9fd46489537" };
     write({ ...policy, configPins });
-    const { value, createEntity } = clients();
+    const { value, createEntity } = await clients();
     await runPolicy(path, { env, clients: value });
     const values = createEntity.mock.calls[0]?.[1] as { payload: Uint8Array };
-    expect(decodePayload<{ configPins: unknown }>(values.payload).configPins).toEqual(configPins);
+    expect(decodePayload<SignedPolicy>(values.payload).policy.configPins).toEqual(configPins);
   });
 
   it.each([
@@ -120,7 +146,7 @@ describe("runPolicy", () => {
     ["a missing recovery", { recovery: undefined }],
   ])("refuses %s without publishing", async (_, change) => {
     write({ ...policy, ...change });
-    const { value, createEntity } = clients();
+    const { value, createEntity } = await clients();
     await expect(runPolicy(path, { env, clients: value })).rejects.toMatchObject({ exitCode: 1 });
     expect(createEntity).not.toHaveBeenCalled();
   });

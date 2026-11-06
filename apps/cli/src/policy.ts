@@ -1,5 +1,5 @@
-import type { Hex, Policy } from "@unforged/core";
-import { fetchPolicies, publishPolicy } from "@unforged/registry";
+import { type Hex, type Policy, type SignedPolicy, signPolicy, verifyPolicy } from "@unforged/core";
+import { decodePayload, encodePayload, fetchPolicies, publishPolicy } from "@unforged/registry";
 import { getAddress, isAddress } from "viem";
 import { z } from "zod";
 import { CliError, EXIT_BAD_INPUT } from "./errors.js";
@@ -43,7 +43,7 @@ export interface PolicyResult {
   curator: Hex;
 }
 
-/** Publishes a policy as the next version for its dapp. Curator key only. */
+/** Signs a policy with the curator key and publishes it as the next version for its dapp. */
 export async function runPolicy(policyPath: string, options: PolicyOptions = {}): Promise<PolicyResult> {
   const { env = process.env } = options;
   const account = accountFromEnv("CURATOR_PRIVATE_KEY", env);
@@ -54,7 +54,9 @@ export async function runPolicy(policyPath: string, options: PolicyOptions = {})
   const versions = published.filter((p) => p.policy.dapp === policy.dapp).map((p) => p.version);
   const version = Math.max(0, ...versions) + 1;
 
-  const { entityKey, txHash } = await registryWrite(() => publishPolicy(write, policy, version, prepare), env);
+  const signed = await signPolicy(policy, account);
+  await checkSigned(signed, account.address);
+  const { entityKey, txHash } = await registryWrite(() => publishPolicy(write, signed, version, prepare), env);
   return { entityKey, txHash, version, curator: account.address };
 }
 
@@ -62,4 +64,12 @@ function parsePolicy(value: unknown, path: string): Policy {
   const result = policySchema.safeParse(value);
   if (!result.success) throw new CliError(EXIT_BAD_INPUT, `invalid policy ${path}:\n${z.prettifyError(result.error)}`);
   return result.data as Policy;
+}
+
+/** Verifies the payload exactly as readers will decode it, so a policy nobody would accept is never sent. */
+async function checkSigned(signed: SignedPolicy, curator: Hex): Promise<void> {
+  const decoded = decodePayload<SignedPolicy>(encodePayload(signed));
+  if (!(await verifyPolicy(decoded, curator))) {
+    throw new CliError(EXIT_BAD_INPUT, "the signed policy does not verify against the curator key; nothing was published");
+  }
 }

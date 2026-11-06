@@ -71,7 +71,7 @@ program
 
 program
   .command("policy")
-  .description("Publish a policy with CURATOR_PRIVATE_KEY as the dapp's next version")
+  .description("Sign a policy with CURATOR_PRIVATE_KEY and publish it as the dapp's next version")
   .argument("<policy>", "path to policy.json")
   .action(async (policy: string) => {
     const result = await runPolicy(policy);
