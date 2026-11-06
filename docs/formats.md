@@ -90,7 +90,7 @@ All entities: `project = "unforged"` (str, indexed), created `readonly`, `expira
 | `dapp` | str | yes | `lido-staking-widget` |
 | `version` | u64 | yes | increasing; the extension uses the highest |
 | `content_type` | str | no | `application/gzip` |
-| `payload` | bytes | no | gzip of the canonical JSON below |
+| `payload` | bytes | no | `gzip(canonicalJSON({ policy: Policy, signature }))` |
 
 Payload:
 ```ts
@@ -107,7 +107,16 @@ interface Policy {
 }
 ```
 
-A file of a mirrored release is at `gatewayUrl(recovery.gateway, ref, path)`. `configPins` is signed by the curator with the rest of the policy. A config file not listed here is blocked, so changing a deployment's config means publishing a new policy version.
+Signed payload:
+```ts
+interface SignedPolicy {
+  policy: Policy;
+  signature: `0x${string}`;          // EIP-191 personal_sign over the 32-byte digest sha256(canonicalJSON(policy)), signed as raw bytes
+}
+```
+Verification: recover the signer from `signature` and the digest. It must equal the configured curator address **and** the Arkiv entity's `$creator`. A payload that is unsigned, mis-signed or malformed is dropped, so Arkiv is untrusted storage for policies too. The `version` attribute is not covered by the signature.
+
+A file of a mirrored release is at `gatewayUrl(recovery.gateway, ref, path)`. `configPins` is signed by the curator with the rest of the policy (the `SignedPolicy` signature above). A config file not listed here is blocked, so changing a deployment's config means publishing a new policy version.
 
 Reads are always scoped with `.createdBy(address)`, and entities that aren't `readonly` are dropped, because a non-readonly entity can be edited after a transfer. `project` and `entity_type` are namespaces anyone can write, not authentication.
 
