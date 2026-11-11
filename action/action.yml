@@ -88,6 +88,7 @@ runs:
         {
           echo "node=$node_version"
           echo "build-parent=$(dirname "$build_path")"
+          echo "build-output=$build_path/$(yq -r '.output' "$RECIPE")"
         } >> "$GITHUB_OUTPUT"
 
     - name: Set up the recipe's Node
@@ -126,6 +127,16 @@ runs:
         root=$(node apps/cli/dist/cli.js build "$RECIPE")
         echo "manifest root: $root"
         echo "manifest-root=$root" >> "$GITHUB_OUTPUT"
+
+    # Runs before the comparison fails the job. Only on a mismatch, so a good run uploads nothing extra.
+    - name: Upload main.*.js for diffing a root mismatch
+      if: inputs.expected-root != '' && steps.build.outputs.manifest-root != inputs.expected-root
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: unforged-mismatch-main-js
+        path: ${{ steps.recipe.outputs.build-output }}/**/main.*.js
+        if-no-files-found: warn
+        overwrite: true
 
     - name: Compare with the expected root
       if: inputs.expected-root != ''
