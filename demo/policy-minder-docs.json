@@ -1,0 +1,13 @@
+{
+  "dapp": "minder-docs",
+  "origins": ["http://localhost:8081"],
+  "repo": "https://github.com/mindersec/minder",
+  "builders": [
+    "0x723eE223ffAEEe90312E158E11FE75763262C5D3",
+    "0x9125c7F8A2001c3f0C902f4eEAEFC414Db339ACD"
+  ],
+  "threshold": 2,
+  "acceptLatest": 3,
+  "thirdParty": {},
+  "recovery": { "gateway": "http://intelears.me/unforged-mirror/" }
+}

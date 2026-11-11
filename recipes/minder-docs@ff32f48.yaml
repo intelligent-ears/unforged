@@ -1,0 +1,17 @@
+# Minder's docs site (https://docs.mindersec.dev), as deployed by gh-pages f9fe4ab ("deploy: ff32f48...").
+# Mirrors .github/workflows/deploy-doc.yml. docs/docusaurus.config.js reads
+# ../pkg/api/openapi/minder/v1/minder.swagger.json, which the full checkout includes.
+dapp: minder-docs
+release: "2026-11-11-ff32f48"
+repo: https://github.com/mindersec/minder
+commit: ff32f48b2801a3454345ee2d652c8b66cf7d11a6
+node: "24"
+packageManager: npm@11.19.1
+files: {}
+env: {}
+envFile: .env
+buildPath: /home/runner/work/minder/minder
+install: cd docs && npm ci
+build: cd docs && npm run build
+output: docs/build
+configFiles: {}

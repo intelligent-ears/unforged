@@ -78,6 +78,20 @@ The Lido policy ([`demo/policy.json`](../demo/policy.json)) requires 2 of 2 buil
 
 Both attestations carry `manifest_root` `13c7535a8b18401f36f176ebc74488ed5929e494b8d4e15f6a68a1bee9d26682`.
 
+## Second site: Minder docs
+
+[`recipes/minder-docs@ff32f48.yaml`](../recipes/minder-docs@ff32f48.yaml) rebuilds Minder's Docusaurus docs (https://docs.mindersec.dev) from commit `ff32f48`, the source of gh-pages commit `f9fe4ab`. All 434 files match that deploy byte for byte (gh-pages also has `CNAME`, which isn't part of the build). Manifest root: `2032cd1fa4ef696df07994713020ba6402033057b64ada9530d9ca6ad754b81a`.
+
+It's served locally, not at docs.mindersec.dev, because Minder redeploys several times a day and each deploy changes about 159 of the 434 files. The live site would soon be a release nobody attested, but the local copy always stays green. The policy is [`demo/policy-minder-docs.json`](../demo/policy-minder-docs.json) (origin `http://localhost:8081`, 2 of 2 builders). It records no mirror ref, so "Open verified copy" doesn't show.
+
+```sh
+git -C <minder clone> fetch origin gh-pages     # needs f9fe4ab locally
+mkdir -p <dir> && git -C <minder clone> archive f9fe4ab | tar -x -C <dir>
+node demo/tools/serve-static.mjs <dir> --port 8081
+```
+
+`serve-static` serves clean URLs the way GitHub Pages does: `/dir/` serves `index.html`, `/page` serves `page.html`, and any other path gets `404.html` with status 404.
+
 ## Pre-recorded backup
 
 Record the full flow once it works (by hour 30). If the venue Wi-Fi or the testnet fails during judging, play the recording and run what still works locally. The Arkiv snapshot means verification itself works offline.
